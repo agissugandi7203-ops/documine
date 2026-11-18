@@ -1,0 +1,16 @@
+# Ignore backend, docs, uploads, and legacy root static files when deploying frontend to Vercel
+apps/api/
+docs/
+uploads/
+supabase/
+scripts/
+assets/
+fonts/
+login/
+falcon.mp4
+index.html
+login.html
+main.js
+styles.css
+.env
+.env.*

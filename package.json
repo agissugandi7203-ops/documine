@@ -1,0 +1,11 @@
+{
+  "name": "waicy-monorepo",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "node scripts/dev.mjs --web-only",
+    "dev:api": "node scripts/dev.mjs --api-only",
+    "build": "npm --prefix apps/web run build",
+    "lint": "npm --prefix apps/web run lint"
+  }
+}

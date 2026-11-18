@@ -1,0 +1,55 @@
+# Environment & Secrets (NEVER COMMIT)
+.env
+.env.*
+!.env.example
+!.env.local.example
+apps/api/.env
+apps/web/.env
+apps/web/.env.local
+*.pem
+*.key
+*.p12
+*.log
+.vercel/
+apps/web/.vercel/
+
+# Python Virtual Environments & Caches
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Local Uploads & Runtime Artifacts
+uploads/
+apps/api/uploads/
+*.duckdb
+*.duckdb.wal
+*.sqlite3
+
+# Node.js & Next.js
+node_modules/
+apps/web/node_modules/
+apps/web/.next/
+apps/web/out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.tsbuildinfo
+next-env.d.ts
+
+# OS & IDE Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
