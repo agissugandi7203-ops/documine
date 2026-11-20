@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   PKCE_COOKIE,
+  isSecureRequest,
   sanitizeUser,
   setAuthCookies,
   setRecoveryCookie,
@@ -142,7 +143,7 @@ export async function POST(req: NextRequest) {
     redirectTo: "/dashboard",
   });
 
-  setAuthCookies(
+  const cookieMeta = await setAuthCookies(
     response,
     {
       access_token: session.access_token,
@@ -155,7 +156,18 @@ export async function POST(req: NextRequest) {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
+    secure: isSecureRequest(req),
     maxAge: 0,
+    expires: new Date(0),
   });
+  if (!cookieMeta) {
+    return NextResponse.json(
+      {
+        code: "TOKEN_EXPIRED",
+        message: "Verification token expired or missing expiry. Please sign in again.",
+      },
+      { status: 401, headers: response.headers }
+    );
+  }
   return response;
 }

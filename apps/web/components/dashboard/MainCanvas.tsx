@@ -1,52 +1,123 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import {
   AlertTriangle,
   ArrowUpRight,
   BookOpen,
+  Check,
   CheckCircle2,
-  Database,
+  Clock,
   FileText,
+  FolderOpen,
   GitCompare,
+  Globe,
   Headphones,
   Layers,
+  MessageSquare,
   Network,
+  Pencil,
+  Plus,
   RefreshCw,
   Share2,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
-import type {
-  AnalyticsDashboardResponse,
-  AnalyticsWidget,
-  AudioBriefingResponse,
-  DocumentItem,
-  DocumentsSummary,
-  QuizResponse,
-  RelationshipGraphResponse,
-  SearchMatch,
-  SynthesisResponse,
+import {
+  type AnalyticsDashboardResponse,
+  type AnalyticsWidget,
+  type AudioBriefingResponse,
+  type DocumentItem,
+  type DocumentsSummary,
+  type QuizResponse,
+  type RelationshipGraphResponse,
+  type SearchMatch,
+  type SynthesisResponse,
 } from "@/lib/dashboard-api";
-import { MonochromeChart } from "./MonochromeChart";
-import { QuickActionsBar } from "./QuickActionsBar";
-import { NAV_ITEMS, type DashboardSectionId } from "./types";
+import {
+  AnalyticsWorkspaceSkeleton,
+  ChatWorkspaceSkeleton,
+  ExecutiveHomeSkeleton,
+  HeroChartSkeleton,
+  RepositoryIdeSkeleton,
+} from "./DashboardSkeletons";
+import { GlobalSearchBar } from "./GlobalSearchBar";
+import type { ChartWindow } from "./HomesCharts";
+import type { ChatLaunchRequest } from "./chat/ChatWorkspace";
+import { type DashboardSectionId } from "./types";
+
+const EChartsKpiMini = dynamic(
+  () => import("./HomesCharts").then((m) => m.EChartsKpiMini),
+  { ssr: false, loading: () => <span className="db-skel-block db-skel-pill" /> }
+);
+
+const HeroActivityChart = dynamic(
+  () => import("./HomesCharts").then((m) => m.HeroActivityChart),
+  { ssr: false, loading: () => <HeroChartSkeleton /> }
+);
+
+const RepositoryIdeWorkspace = dynamic(
+  () =>
+    import("./RepositoryIdeWorkspace").then((m) => m.RepositoryIdeWorkspace),
+  { ssr: false, loading: () => <RepositoryIdeSkeleton /> }
+);
+
+const ChatWorkspace = dynamic(
+  () => import("./chat/ChatWorkspace").then((m) => m.ChatWorkspace),
+  { ssr: false, loading: () => <ChatWorkspaceSkeleton /> }
+);
+
+const AnalyticsWorkspace = dynamic(
+  () =>
+    import("./analytics/AnalyticsWorkspace").then((m) => m.AnalyticsWorkspace),
+  { ssr: false, loading: () => <AnalyticsWorkspaceSkeleton /> }
+);
+
+const ExecutiveDashboardHome = dynamic(
+  () =>
+    import("./ExecutiveDashboardHome").then((m) => m.ExecutiveDashboardHome),
+  { ssr: false, loading: () => <ExecutiveHomeSkeleton /> }
+);
+
+interface LocalCrudItem {
+  id: string;
+  title: string;
+  category: string;
+  pages: number;
+  status: string;
+  isBackend?: boolean;
+}
+
+const CRUD_CATEGORIES = ["All", "Finance", "Engineering", "Research"] as const;
+
+function getCategoryTone(category: string): "terracotta" | "sage" | "lime" | "ink" {
+  const c = category.toLowerCase();
+  if (c.includes("fin") || c.includes("rev") || c.includes("tax")) return "terracotta";
+  if (c.includes("eng") || c.includes("tech") || c.includes("arch")) return "sage";
+  if (c.includes("res") || c.includes("mark") || c.includes("brief")) return "lime";
+  return "ink";
+}
 
 interface MainCanvasProps {
   activeNavId: DashboardSectionId;
   userName: string;
   workspaceName: string;
-  backendOnline: boolean;
+  workspaceId?: string;
   loadingData: boolean;
   uploading: boolean;
   uploadError: string | null;
   summary: DocumentsSummary | null;
   documents: DocumentItem[];
   selectedDocId: string | null;
+  openRepoDocRequest?: { docId: string; nonce: number } | null;
   analytics: AnalyticsDashboardResponse | null;
   generatedWidget: AnalyticsWidget | null;
   analyticsGenerating: boolean;
   searchQuery: string;
+  searchLoading: boolean;
+  searchResultCount: number | null;
   searchMatches: SearchMatch[];
   relationships: RelationshipGraphResponse | null;
   synthesisResult: SynthesisResponse | null;
@@ -57,7 +128,21 @@ interface MainCanvasProps {
   audioLoading: boolean;
   onSelectNav: (section: DashboardSectionId) => void;
   onSelectDoc: (docId: string) => void;
-  onTriggerUpload: () => void;
+  onOpenSearchResultDoc: (docId: string) => void;
+  onAskDocInChat: (docId: string) => void;
+  onSearchChange: (q: string) => void;
+  onSearchClear: () => void;
+  onTriggerUpload: (targetFolder?: string) => void;
+  onUploadFilesToRepo: (
+    files: File[],
+    targetFolder?: string
+  ) => Promise<Array<{ filename: string; doc?: DocumentItem; error?: string }>>;
+  onRequestDeleteDoc: (doc: DocumentItem) => void;
+  onUpdateDocumentMeta: (
+    docId: string,
+    payload: { title?: string; category?: string }
+  ) => Promise<void>;
+  onFocusSearch?: () => void;
   onDropFile: (file: File) => void;
   onDeleteDoc: (docId: string) => void;
   onRefreshData: () => void;
@@ -76,24 +161,29 @@ function formatBytes(bytes: number): string {
 }
 
 /**
- * Free-form Atelier Bento Workspace blending clean alabaster surfaces,
- * obsidian contrast card, terracotta accents, and original vector assets.
+ * Elevated Editorial Dashboard Canvas:
+ * - Refined greeting header with inline tactile stat chips
+ * - Top Row: Overlapping Calescence-style tactile folder cards + Hatch-Decal ECharts & Oripio Rhythm chart
+ * - Bottom Row: Filterable Document CRUD Table with category monograms + Full-bleed Risograph AI Studio poster card
  */
 export function MainCanvas({
   activeNavId,
   userName,
   workspaceName,
-  backendOnline,
+  workspaceId,
   loadingData,
   uploading,
   uploadError,
   summary,
   documents,
   selectedDocId,
+  openRepoDocRequest,
   analytics,
   generatedWidget,
   analyticsGenerating,
   searchQuery,
+  searchLoading,
+  searchResultCount,
   searchMatches,
   relationships,
   synthesisResult,
@@ -104,7 +194,15 @@ export function MainCanvas({
   audioLoading,
   onSelectNav,
   onSelectDoc,
+  onOpenSearchResultDoc,
+  onAskDocInChat,
+  onSearchChange,
+  onSearchClear,
   onTriggerUpload,
+  onUploadFilesToRepo,
+  onRequestDeleteDoc,
+  onUpdateDocumentMeta,
+  onFocusSearch,
   onDropFile,
   onDeleteDoc,
   onRefreshData,
@@ -116,8 +214,27 @@ export function MainCanvas({
   onDropPreviewCardOnCanvas,
 }: MainCanvasProps) {
   const [isDragOver, setIsDragOver] = useState(false);
+  const chartWindow: ChartWindow = "7d";
   const [selectedSynthIds, setSelectedSynthIds] = useState<string[]>([]);
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
+
+  // Interactive CRUD Table state
+  const [localEntries, setLocalEntries] = useState<LocalCrudItem[]>([]);
+  const [docEdits, setDocEdits] = useState<
+    Record<string, { title: string; category: string }>
+  >({});
+  const [crudCategoryFilter, setCrudCategoryFilter] = useState<string>("All");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [addingNewRow, setAddingNewRow] = useState(false);
+  const [newRowTitle, setNewRowTitle] = useState("");
+  const [newRowCategory, setNewRowCategory] = useState("Research");
+
+  // Chat scope & launch request from Analytics / Repository / Homes ("Ask about this file")
+  const [chatScopeDocId, setChatScopeDocId] = useState<string>("all");
+  const [chatLaunchRequest, setChatLaunchRequest] =
+    useState<ChatLaunchRequest | null>(null);
 
   useEffect(() => {
     if (documents.length >= 2 && selectedSynthIds.length === 0) {
@@ -125,35 +242,160 @@ export function MainCanvas({
     }
   }, [documents, selectedSynthIds.length]);
 
+  useEffect(() => {
+    if (activeNavId !== "homes") return;
+    const handleQuickRowShortcut = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (
+        tag === "input" ||
+        tag === "textarea" ||
+        tag === "select" ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+      if (e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        setAddingNewRow(true);
+      }
+    };
+    window.addEventListener("keydown", handleQuickRowShortcut);
+    return () => window.removeEventListener("keydown", handleQuickRowShortcut);
+  }, [activeNavId]);
+
   const activeDoc =
     documents.find((d) => d.id === selectedDocId) ?? documents[0] ?? null;
 
   const primaryWidget =
-    generatedWidget ?? analytics?.widgets?.[0] ?? analytics?.auto_widgets?.[0] ?? null;
+    generatedWidget ??
+    analytics?.widgets?.[0] ??
+    analytics?.auto_widgets?.[0] ??
+    null;
 
   const totalDocs =
     summary?.total_documents ??
     analytics?.corpus_telemetry?.total_documents ??
-    documents.length;
+    (documents.length > 0 ? documents.length : localEntries.length);
   const readyDocs =
     summary?.ready_count ??
-    documents.filter((d) =>
-      ["ready", "partial_ready", "completed"].includes(
-        d.status || d.processing_status
-      )
-    ).length;
+    (documents.length > 0
+      ? documents.filter((d) =>
+          ["ready", "partial_ready", "completed"].includes(
+            d.status || d.processing_status
+          )
+        ).length
+      : localEntries.length);
   const totalPages =
     analytics?.corpus_telemetry?.total_pages ??
-    documents.reduce((acc, d) => acc + (d.page_count || 1), 0);
-  const totalMetrics = analytics?.corpus_telemetry?.total_verified_metrics ?? 0;
+    (documents.length > 0
+      ? documents.reduce((acc, d) => acc + (d.page_count || 1), 0)
+      : localEntries.reduce((acc, d) => acc + d.pages, 0));
+  const totalMetrics =
+    analytics?.corpus_telemetry?.total_verified_metrics ?? 0;
   const totalTables = analytics?.corpus_telemetry?.total_tables ?? 0;
   const totalRelationships =
     analytics?.corpus_telemetry?.total_relationships ??
     relationships?.edge_count ??
     0;
-  const corpusProfile = (
-    analytics?.detected_corpus_profile || "empty_corpus"
-  ).replace(/_/g, " ");
+  const isWorkspaceEmpty = documents.length === 0 && localEntries.length === 0;
+
+  const docSpark = useMemo(() => [14, 20, 17, 25, 22, 28, 32], []);
+
+  const crudRows: LocalCrudItem[] = useMemo(() => {
+    const backendMapped: LocalCrudItem[] = documents.map((d) => {
+      const override = docEdits[d.id];
+      return {
+        id: d.id,
+        title: override?.title ?? d.title,
+        category: override?.category ?? (d.category || "Document"),
+        pages: d.page_count || 1,
+        status: d.status || d.processing_status || "Ready",
+        isBackend: true,
+      };
+    });
+    const combined =
+      backendMapped.length > 0
+        ? [
+            ...backendMapped,
+            ...localEntries.filter((l) => l.id.startsWith("user-")),
+          ]
+        : localEntries;
+
+    const byCat =
+      crudCategoryFilter === "All"
+        ? combined
+        : combined.filter(
+            (r) =>
+              r.category.toLowerCase() === crudCategoryFilter.toLowerCase()
+          );
+
+    if (!searchQuery.trim()) return byCat;
+    const q = searchQuery.toLowerCase();
+    return byCat.filter(
+      (r) =>
+        r.title.toLowerCase().includes(q) ||
+        r.category.toLowerCase().includes(q)
+    );
+  }, [documents, docEdits, localEntries, searchQuery, crudCategoryFilter]);
+
+  const startEditRow = (row: LocalCrudItem) => {
+    setEditingId(row.id);
+    setEditTitle(row.title);
+    setEditCategory(row.category);
+  };
+
+  const saveEditRow = (row: LocalCrudItem) => {
+    const cleanTitle = editTitle.trim() || row.title;
+    const cleanCat = editCategory.trim() || row.category;
+    if (row.isBackend) {
+      setDocEdits((prev) => ({
+        ...prev,
+        [row.id]: { title: cleanTitle, category: cleanCat },
+      }));
+      void onUpdateDocumentMeta(row.id, { title: cleanTitle, category: cleanCat });
+    } else {
+      setLocalEntries((prev) =>
+        prev.map((item) =>
+          item.id === row.id
+            ? { ...item, title: cleanTitle, category: cleanCat }
+            : item
+        )
+      );
+    }
+    setEditingId(null);
+  };
+
+  const handleDeleteCrudRow = (row: LocalCrudItem) => {
+    if (row.isBackend) {
+      const targetDoc = documents.find((d) => d.id === row.id);
+      if (targetDoc) {
+        onRequestDeleteDoc(targetDoc);
+      } else {
+        onDeleteDoc(row.id);
+      }
+    } else {
+      setLocalEntries((prev) => prev.filter((item) => item.id !== row.id));
+    }
+  };
+
+  const handleCreateCrudRow = (e: React.FormEvent) => {
+    e.preventDefault();
+    const title = newRowTitle.trim();
+    if (!title) return;
+    const created: LocalCrudItem = {
+      id: `user-${Date.now()}`,
+      title: title.endsWith(".pdf") ? title : `${title}.pdf`,
+      category: newRowCategory.trim() || "Research",
+      pages: 8,
+      status: "Ready",
+    };
+    setLocalEntries((prev) => [created, ...prev]);
+    setNewRowTitle("");
+    setAddingNewRow(false);
+    setCrudCategoryFilter("All");
+  };
 
   const filteredDocs = searchQuery.trim()
     ? documents.filter(
@@ -203,77 +445,98 @@ export function MainCanvas({
       onDragLeave={() => setIsDragOver(false)}
       onDrop={handleCanvasDrop}
     >
-      {/* Top Pill Navigation Header */}
-      <header className="db-top-header">
-        <div className="db-top-brand-meta">
-          <span className="db-brand-wordmark">DocuMind</span>
-          <span className="db-workspace-chip">{workspaceName}</span>
+      {/* Global Top Workspace Header (Scoped controls per view; Search always global) */}
+      <header
+        className={`db-greeting-row ${
+          activeNavId === "chat" ? "db-greeting-row--minimal" : ""
+        } ${activeNavId === "repository" ? "db-greeting-row--compact" : ""}`}
+      >
+        <div className="db-greeting-left">
+          <div className="db-greeting-title-stack">
+            <span className="db-greeting-kicker">{workspaceName}</span>
+            <h1 className="db-greeting-title">
+              {(activeNavId === "homes" || activeNavId === "chat") &&
+                `Hello, ${userName}`}
+              {activeNavId === "repository" && "Document Repository"}
+              {activeNavId === "layers" && "Layers & Inspector"}
+              {activeNavId === "analytics" && "Analytics Studio"}
+              {activeNavId === "synthesis" && "Synthesis"}
+              {activeNavId === "studio" && "Studio"}
+            </h1>
+          </div>
+
+          {activeNavId === "homes" && (
+            <div className="db-inline-header-stats">
+              <div className="db-inline-stat">
+                <span className="db-inline-stat-ring">
+                  <Clock size={13} />
+                </span>
+                <div className="db-inline-stat-text">
+                  <strong className="db-inline-stat-val">{totalPages}</strong>
+                  <span className="db-inline-stat-lbl">Pages</span>
+                </div>
+              </div>
+
+              <div className="db-inline-stat">
+                <span className="db-inline-stat-ring db-inline-stat-ring--sage">
+                  <Globe size={13} />
+                </span>
+                <div className="db-inline-stat-text">
+                  <strong className="db-inline-stat-val">{totalDocs}</strong>
+                  <span className="db-inline-stat-lbl">Docs</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        <nav className="db-top-tabs" aria-label="Workspace Sections">
-          {NAV_ITEMS.map((tab) => {
-            const isActive = activeNavId === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                className={`db-top-tab ${isActive ? "db-top-tab--active" : ""}`}
-                onClick={() => onSelectNav(tab.id)}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
+        <div className="db-header-controls">
+          <GlobalSearchBar
+            query={searchQuery}
+            loading={searchLoading}
+            resultCount={searchResultCount}
+            matches={searchMatches}
+            documents={documents}
+            onChange={onSearchChange}
+            onClear={onSearchClear}
+            onOpenDocument={onOpenSearchResultDoc}
+            onAskDocument={onAskDocInChat}
+          />
 
-        <div className="db-top-status-group">
-          <span
-            className={`db-status-pill ${
-              backendOnline ? "db-status-pill--online" : "db-status-pill--offline"
-            }`}
-          >
-            <span className="db-status-dot" aria-hidden="true" />
-            {backendOnline ? "API Online" : "Standby"}
-          </span>
-          <button
-            type="button"
-            className="db-stage-icon-btn"
-            aria-label="Refresh workspace"
-            onClick={onRefreshData}
-            disabled={loadingData}
-          >
-            <RefreshCw
-              size={14}
-              className={loadingData ? "db-spin" : undefined}
-            />
-          </button>
+          {activeNavId !== "chat" && (
+            <button
+              type="button"
+              className="db-quick-btn db-quick-btn--accent"
+              onClick={() => onTriggerUpload()}
+              disabled={uploading}
+            >
+              <Upload size={13} />
+              <span>
+                {uploading
+                  ? "Uploading..."
+                  : activeNavId === "homes"
+                  ? "Upload PDF"
+                  : "Upload File"}
+              </span>
+            </button>
+          )}
+
+          {activeNavId !== "chat" && (
+            <button
+              type="button"
+              className="db-stage-icon-btn"
+              aria-label="Refresh workspace"
+              onClick={onRefreshData}
+              disabled={loadingData}
+            >
+              <RefreshCw
+                size={14}
+                className={loadingData ? "db-spin" : undefined}
+              />
+            </button>
+          )}
         </div>
       </header>
-
-      {/* Hero Greeting + Quick Actions Row (Zero AI input bar) */}
-      <div className="db-greeting-row">
-        <div className="db-greeting-copy">
-          <h1 className="db-greeting-title">
-            {activeNavId === "homes" && `Welcome back, ${userName}!`}
-            {activeNavId === "layers" && "Document Repository & Layers"}
-            {activeNavId === "analytics" && "DuckDB Verified Analytics"}
-            {activeNavId === "synthesis" && "Cross-Document Synthesis"}
-            {activeNavId === "studio" && "Adaptive Learning Studio"}
-          </h1>
-          <p className="db-greeting-sub">
-            {activeDoc
-              ? `Active source: ${activeDoc.title} · Corpus: ${corpusProfile}`
-              : `Manage your documents, verified metrics, and synthesis · ${corpusProfile}`}
-          </p>
-        </div>
-
-        <QuickActionsBar
-          activeNavId={activeNavId}
-          uploading={uploading}
-          onTriggerUpload={onTriggerUpload}
-          onNavigate={onSelectNav}
-        />
-      </div>
 
       {uploadError && (
         <div className="db-stage-banner">
@@ -282,260 +545,70 @@ export function MainCanvas({
         </div>
       )}
 
-      {searchQuery.trim() && searchMatches.length > 0 && (
-        <div className="db-search-results-strip">
-          <div className="db-search-strip-label">
-            Matches for &ldquo;{searchQuery}&rdquo; ({searchMatches.length})
-          </div>
-          <div className="db-search-hits">
-            {searchMatches.slice(0, 3).map((m, idx) => (
-              <button
-                key={`${m.chunk_id || m.id || idx}`}
-                type="button"
-                className="db-search-hit-chip"
-                onClick={() => {
-                  const targetId = m.doc_id || m.document_id;
-                  if (targetId) {
-                    onSelectDoc(targetId);
-                    onSelectNav("layers");
-                  }
-                }}
-              >
-                <span className="db-hit-title">
-                  {m.doc_title || "Document"} · p.{m.page_number || 1}
-                </span>
-                <span className="db-hit-snippet">
-                  {(m.text_content || m.content || "").slice(0, 88)}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Main Scrollable Bento Content */}
-      <div className="db-stage-scroll">
+      {/* Main Stage (Locked 100vh only on Repository & Chat; scrollable BI canvas on Homes & Analytics) */}
+      <div
+        className={`db-stage-scroll ${
+          activeNavId === "repository" ? "db-stage-scroll--locked" : ""
+        } ${activeNavId === "chat" ? "db-stage-scroll--chat" : ""}`}
+      >
         {activeNavId === "homes" && (
-          <div className="db-homes-layout">
-            {/* 3-Card Asymmetric KPI Strip (Light + Light + Dark Obsidian Contrast) */}
-            <div className="db-kpi-row">
-              <div className="db-kpi-card">
-                <div className="db-kpi-head">
-                  <span className="db-kpi-badge">
-                    <FileText size={13} />
-                    <span>Documents</span>
-                  </span>
-                  <button
-                    type="button"
-                    className="db-kpi-arrow"
-                    aria-label="Open document layers"
-                    onClick={() => onSelectNav("layers")}
-                  >
-                    <ArrowUpRight size={14} />
-                  </button>
-                </div>
-                <div className="db-kpi-value">{totalDocs}</div>
-                <div className="db-kpi-footer">
-                  <span className="db-kpi-pill">{readyDocs} ready</span>
-                  <span className="db-kpi-muted">
-                    {summary?.processing_count ?? 0} queued
-                  </span>
-                </div>
-              </div>
+          <ExecutiveDashboardHome
+            documents={documents}
+            summary={summary}
+            analytics={analytics}
+            relationships={relationships}
+            uploading={uploading}
+            onSelectNav={onSelectNav}
+            onTriggerUpload={() => onTriggerUpload()}
+            onOpenDocInRepository={(docId) => onOpenSearchResultDoc(docId)}
+            onAskDocInChat={(docId, prompt) => {
+              setChatScopeDocId(docId || "all");
+              if (prompt) {
+                setChatLaunchRequest({
+                  scopeDocId: docId || "all",
+                  prompt,
+                  autoSend: false,
+                  nonce: Date.now(),
+                });
+              }
+              onSelectNav("chat");
+            }}
+            onUpdateDocumentMeta={onUpdateDocumentMeta}
+            onRequestDeleteDoc={onRequestDeleteDoc}
+          />
+        )}
 
-              <div className="db-kpi-card">
-                <div className="db-kpi-head">
-                  <span className="db-kpi-badge db-kpi-badge--sage">
-                    <BookOpen size={13} />
-                    <span>Pages & Metrics</span>
-                  </span>
-                  <button
-                    type="button"
-                    className="db-kpi-arrow"
-                    aria-label="Open analytics"
-                    onClick={() => onSelectNav("analytics")}
-                  >
-                    <ArrowUpRight size={14} />
-                  </button>
-                </div>
-                <div className="db-kpi-value">{totalPages}</div>
-                <div className="db-kpi-footer">
-                  <span className="db-kpi-pill">{totalMetrics} metrics</span>
-                  <span className="db-kpi-muted">{totalTables} tables</span>
-                </div>
-              </div>
+        {/* Streaming AI Chat Workspace */}
+        {activeNavId === "chat" && (
+          <ChatWorkspace
+            userName={userName}
+            documents={documents}
+            initialScopeDocId={chatScopeDocId}
+            launchRequest={chatLaunchRequest}
+            onNavigateToInspector={(docId) => onOpenSearchResultDoc(docId)}
+            onRefreshDocuments={onRefreshData}
+            onUploadFilesToRepo={onUploadFilesToRepo}
+            onOpenUploadModal={() => onTriggerUpload()}
+          />
+        )}
 
-              <div className="db-kpi-card db-kpi-card--dark">
-                <div className="db-kpi-head">
-                  <span className="db-kpi-badge db-kpi-badge--dark">
-                    <Share2 size={13} />
-                    <span>Knowledge Graph</span>
-                  </span>
-                  <button
-                    type="button"
-                    className="db-kpi-arrow db-kpi-arrow--dark"
-                    aria-label="Open synthesis graph"
-                    onClick={() => onSelectNav("synthesis")}
-                  >
-                    <ArrowUpRight size={14} />
-                  </button>
-                </div>
-                <div className="db-kpi-value">{totalRelationships}</div>
-                <div className="db-kpi-spark-row">
-                  <span className="db-kpi-dark-sub">{corpusProfile}</span>
-                  <svg
-                    className="db-mini-sparkline"
-                    viewBox="0 0 96 26"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M2 21L18 15L32 18L48 9L64 13L78 5L94 8"
-                      stroke="#e85a24"
-                      strokeWidth="2.4"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            {/* Middle Bento Grid: Chart / Original Asset + Recent Documents Table */}
-            <div className="db-homes-split">
-              <div className="db-panel-box db-panel-box--chart">
-                <div className="db-panel-box-head">
-                  <div>
-                    <div className="db-panel-box-title">
-                      {primaryWidget
-                        ? primaryWidget.title
-                        : "Repository Telemetry"}
-                    </div>
-                    <div className="db-panel-box-sub">
-                      {primaryWidget
-                        ? primaryWidget.insight_summary
-                        : "Visual overview of your indexed documents & DuckDB metrics"}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="db-mini-pill-btn"
-                    onClick={() => onSelectNav("analytics")}
-                  >
-                    <span>Explore</span>
-                    <ArrowUpRight size={12} />
-                  </button>
-                </div>
-
-                {primaryWidget &&
-                primaryWidget.echarts_spec &&
-                (primaryWidget.echarts_spec.series?.[0]?.data?.length ?? 0) >
-                  0 ? (
-                  <MonochromeChart widget={primaryWidget} height={210} />
-                ) : (
-                  <div className="db-asset-empty-card">
-                    <img
-                      src="/assets/workspace-emblem.svg"
-                      alt="DocuMind analytical layers illustration"
-                      className="db-emblem-illustration"
-                    />
-                    <div className="db-asset-empty-copy">
-                      <div className="db-asset-empty-title">
-                        Ready for your first document
-                      </div>
-                      <p>
-                        Drop any PDF, spreadsheet, or note here to unlock DuckDB
-                        telemetry, grounded citations, and synthesis.
-                      </p>
-                      <button
-                        type="button"
-                        className="db-mini-pill-btn db-mini-pill-btn--accent"
-                        onClick={onTriggerUpload}
-                      >
-                        <Upload size={12} />
-                        <span>Upload Document</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="db-panel-box">
-                <div className="db-panel-box-head">
-                  <div>
-                    <div className="db-panel-box-title">Recent Documents</div>
-                    <div className="db-panel-box-sub">
-                      {filteredDocs.length} document(s) in workspace
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="db-mini-pill-btn"
-                    onClick={() => onSelectNav("layers")}
-                  >
-                    <span>View All</span>
-                    <ArrowUpRight size={12} />
-                  </button>
-                </div>
-
-                {filteredDocs.length > 0 ? (
-                  <ul className="db-doc-list">
-                    {filteredDocs.slice(0, 5).map((doc) => {
-                      const isSelected = activeDoc?.id === doc.id;
-                      const st = (
-                        doc.status ||
-                        doc.processing_status ||
-                        "ready"
-                      ).toLowerCase();
-                      const isReady = ["ready", "completed", "partial_ready"].includes(
-                        st
-                      );
-
-                      return (
-                        <li key={doc.id}>
-                          <button
-                            type="button"
-                            className={`db-doc-row ${
-                              isSelected ? "db-doc-row--selected" : ""
-                            }`}
-                            onClick={() => onSelectDoc(doc.id)}
-                          >
-                            <span className="db-doc-avatar">
-                              <FileText size={14} />
-                            </span>
-                            <div className="db-doc-row-meta">
-                              <span className="db-doc-row-title">
-                                {doc.title}
-                              </span>
-                              <span className="db-doc-row-sub">
-                                {doc.page_count}p ·{" "}
-                                {formatBytes(doc.file_size_bytes)} ·{" "}
-                                {doc.category || "document"}
-                              </span>
-                            </div>
-                            <span
-                              className={`db-doc-status-chip ${
-                                isReady
-                                  ? "db-doc-status-chip--ready"
-                                  : "db-doc-status-chip--pending"
-                              }`}
-                            >
-                              {st}
-                            </span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <div className="db-empty-dash-box">
-                    <Layers size={22} className="db-empty-icon" />
-                    <p>No documents uploaded yet.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+        {/* VS Code-Style Document Repository & Embedded AI IDE */}
+        {activeNavId === "repository" && (
+          <RepositoryIdeWorkspace
+            workspaceName={workspaceName}
+            workspaceId={workspaceId}
+            userName={userName}
+            documents={documents}
+            selectedDocId={selectedDocId}
+            openDocRequest={openRepoDocRequest}
+            uploading={uploading}
+            onSelectDoc={onSelectDoc}
+            onOpenUploadModal={(folder) => onTriggerUpload(folder)}
+            onUploadFilesToRepo={onUploadFilesToRepo}
+            onRequestDeleteDoc={onRequestDeleteDoc}
+            onUpdateDocumentMeta={onUpdateDocumentMeta}
+            onRefreshDocuments={onRefreshData}
+          />
         )}
 
         {activeNavId === "layers" && (
@@ -543,12 +616,12 @@ export function MainCanvas({
             <div className="db-panel-box">
               <div className="db-panel-box-head">
                 <div className="db-panel-box-title">
-                  Repository Files ({filteredDocs.length})
+                  Layers ({filteredDocs.length})
                 </div>
                 <button
                   type="button"
                   className="db-mini-pill-btn db-mini-pill-btn--accent"
-                  onClick={onTriggerUpload}
+                  onClick={() => onTriggerUpload()}
                   disabled={uploading}
                 >
                   <Upload size={12} />
@@ -573,7 +646,7 @@ export function MainCanvas({
                         <div className="db-doc-row-meta">
                           <span className="db-doc-row-title">{doc.title}</span>
                           <span className="db-doc-row-sub">
-                            {doc.page_count} pages ·{" "}
+                            {doc.page_count}p ·{" "}
                             {formatBytes(doc.file_size_bytes)}
                           </span>
                         </div>
@@ -581,20 +654,23 @@ export function MainCanvas({
                           {doc.status || doc.processing_status}
                         </span>
                       </button>
-                      <button
-                        type="button"
-                        className="db-doc-delete-btn"
-                        aria-label={`Delete ${doc.title}`}
-                        onClick={() => onDeleteDoc(doc.id)}
-                      >
-                        <Trash2 size={13} />
-                      </button>
                     </li>
                   ))}
                 </ul>
               ) : (
                 <div className="db-empty-dash-box">
-                  <p>No matching documents in this workspace.</p>
+                  <Layers size={24} className="db-empty-icon" />
+                  <p>
+                    No document layers yet. Start by uploading your first PDF.
+                  </p>
+                  <button
+                    type="button"
+                    className="db-mini-pill-btn db-mini-pill-btn--accent"
+                    onClick={() => onTriggerUpload()}
+                  >
+                    <Upload size={12} />
+                    <span>Start Upload</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -602,7 +678,7 @@ export function MainCanvas({
             <div className="db-panel-box">
               <div className="db-panel-box-head">
                 <div className="db-panel-box-title">
-                  {activeDoc ? activeDoc.title : "Layer Inspector"}
+                  {activeDoc ? activeDoc.title : "Inspector"}
                 </div>
                 {activeDoc && (
                   <span className="db-doc-status-chip">
@@ -614,30 +690,16 @@ export function MainCanvas({
               {activeDoc ? (
                 <div className="db-inspector-body">
                   <p className="db-inspector-summary">
-                    {activeDoc.summary ||
-                      "Document indexed in workspace. Use Analytics, Synthesis, or Studio to extract insights."}
+                    {activeDoc.summary || "Indexed in workspace."}
                   </p>
                   <div className="db-inspector-stats">
                     <span>Tables: {activeDoc.table_count ?? 0}</span>
                     <span>Metrics: {activeDoc.metric_count ?? 0}</span>
-                    <span>
-                      Domain:{" "}
-                      {activeDoc.primary_domain || activeDoc.category || "General"}
-                    </span>
                   </div>
-                  {(activeDoc.main_topics?.length ?? 0) > 0 && (
-                    <div className="db-topic-chips">
-                      {activeDoc.main_topics?.slice(0, 6).map((topic) => (
-                        <span key={topic} className="db-topic-chip">
-                          {topic}
-                        </span>
-                      ))}
-                    </div>
-                  )}
                 </div>
               ) : (
                 <div className="db-empty-dash-box">
-                  <p>Select a document on the left to inspect its metadata.</p>
+                  <p>Select a document to inspect its layer details.</p>
                 </div>
               )}
             </div>
@@ -645,71 +707,22 @@ export function MainCanvas({
         )}
 
         {activeNavId === "analytics" && (
-          <div className="db-analytics-layout">
-            <div className="db-analytics-toolbar">
-              <span className="db-panel-box-sub">
-                Deterministic DuckDB SQL Engine
-              </span>
-              <div className="db-analytics-presets">
-                <button
-                  type="button"
-                  className="db-mini-pill-btn db-mini-pill-btn--accent"
-                  disabled={analyticsGenerating}
-                  onClick={() =>
-                    onGenerateWidget("bar", "Compare key metrics across documents")
-                  }
-                >
-                  {analyticsGenerating ? "Running..." : "Bar Summary"}
-                </button>
-                <button
-                  type="button"
-                  className="db-mini-pill-btn"
-                  disabled={analyticsGenerating}
-                  onClick={() =>
-                    onGenerateWidget("line", "Show trend across categories or periods")
-                  }
-                >
-                  Line Trend
-                </button>
-                <button
-                  type="button"
-                  className="db-mini-pill-btn"
-                  disabled={analyticsGenerating}
-                  onClick={() =>
-                    onGenerateWidget("pie", "Show proportion breakdown of metrics")
-                  }
-                >
-                  Pie Share
-                </button>
-              </div>
-            </div>
-
-            {primaryWidget ? (
-              <div className="db-panel-box">
-                <div className="db-panel-box-head">
-                  <div>
-                    <div className="db-panel-box-title">{primaryWidget.title}</div>
-                    <div className="db-panel-box-sub">
-                      {primaryWidget.insight_summary}
-                    </div>
-                  </div>
-                </div>
-                {primaryWidget.echarts_spec &&
-                  (primaryWidget.echarts_spec.series?.[0]?.data?.length ?? 0) >
-                    0 && <MonochromeChart widget={primaryWidget} height={240} />}
-                {primaryWidget.sql_query && (
-                  <div className="db-sql-preview">
-                    <Database size={12} />
-                    <code>{primaryWidget.sql_query}</code>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="db-empty-dash-box">
-                <p>Upload documents first to unlock DuckDB SQL analytics.</p>
-              </div>
-            )}
-          </div>
+          <AnalyticsWorkspace
+            workspaceId={workspaceId}
+            documents={documents}
+            uploading={uploading}
+            onTriggerUpload={() => onTriggerUpload()}
+            onAskInChat={({ scopeDocId, prompt, autoSend }) => {
+              setChatScopeDocId(scopeDocId || "all");
+              setChatLaunchRequest({
+                scopeDocId: scopeDocId || "all",
+                prompt,
+                autoSend,
+                nonce: Date.now(),
+              });
+              onSelectNav("chat");
+            }}
+          />
         )}
 
         {activeNavId === "synthesis" && (
@@ -717,7 +730,7 @@ export function MainCanvas({
             <div className="db-panel-box">
               <div className="db-panel-box-head">
                 <div className="db-panel-box-title">
-                  Compare Documents ({selectedSynthIds.length}/10)
+                  Compare ({selectedSynthIds.length})
                 </div>
                 <button
                   type="button"
@@ -726,7 +739,7 @@ export function MainCanvas({
                   onClick={() => onRunSynthesis(selectedSynthIds)}
                 >
                   <GitCompare size={12} />
-                  <span>{synthesisLoading ? "Synthesizing..." : "Compare"}</span>
+                  <span>{synthesisLoading ? "Running..." : "Compare"}</span>
                 </button>
               </div>
 
@@ -751,7 +764,15 @@ export function MainCanvas({
                 </div>
               ) : (
                 <div className="db-empty-dash-box">
-                  <p>Upload at least 2 documents to run Cross-Document Synthesis.</p>
+                  <p>Upload at least 2 documents to compare insights side by side.</p>
+                  <button
+                    type="button"
+                    className="db-mini-pill-btn db-mini-pill-btn--accent"
+                    onClick={() => onTriggerUpload()}
+                  >
+                    <Upload size={12} />
+                    <span>Upload PDF</span>
+                  </button>
                 </div>
               )}
 
@@ -766,7 +787,7 @@ export function MainCanvas({
                     className="db-mini-pill-btn"
                     onClick={onRecomputeRelationships}
                   >
-                    Recompute Graph
+                    Recompute
                   </button>
                 </div>
               )}
@@ -777,7 +798,7 @@ export function MainCanvas({
                 <div className="db-panel-box-title">
                   {synthesisResult
                     ? synthesisResult.synthesis_headline
-                    : "Synthesis Matrix"}
+                    : "Matrix"}
                 </div>
               </div>
 
@@ -802,7 +823,7 @@ export function MainCanvas({
                 </div>
               ) : (
                 <div className="db-empty-dash-box">
-                  <p>Select 2 or more documents and click Compare.</p>
+                  <p>Select 2 or more documents on the left, then click Compare.</p>
                 </div>
               )}
             </div>
@@ -813,7 +834,7 @@ export function MainCanvas({
           <div className="db-homes-split">
             <div className="db-panel-box">
               <div className="db-panel-box-head">
-                <div className="db-panel-box-title">Adaptive Quiz</div>
+                <div className="db-panel-box-title">Quiz</div>
                 <button
                   type="button"
                   className="db-mini-pill-btn db-mini-pill-btn--accent"
@@ -821,7 +842,7 @@ export function MainCanvas({
                   onClick={() => activeDoc && onGenerateQuiz(activeDoc.id)}
                 >
                   <BookOpen size={12} />
-                  <span>{quizLoading ? "Generating..." : "Generate Quiz"}</span>
+                  <span>{quizLoading ? "Generating..." : "Generate"}</span>
                 </button>
               </div>
 
@@ -868,16 +889,26 @@ export function MainCanvas({
                 <div className="db-empty-dash-box">
                   <p>
                     {activeDoc
-                      ? `Generate grounded questions for "${activeDoc.title}".`
-                      : "Upload a document first to generate an adaptive quiz."}
+                      ? `Generate an interactive quiz from "${activeDoc.title}".`
+                      : "Upload your first document to generate an interactive quiz."}
                   </p>
+                  {!activeDoc && (
+                    <button
+                      type="button"
+                      className="db-mini-pill-btn db-mini-pill-btn--accent"
+                      onClick={() => onTriggerUpload()}
+                    >
+                      <Upload size={12} />
+                      <span>Start Upload</span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
 
             <div className="db-panel-box">
               <div className="db-panel-box-head">
-                <div className="db-panel-box-title">Audio Briefing Script</div>
+                <div className="db-panel-box-title">Audio Briefing</div>
                 <button
                   type="button"
                   className="db-mini-pill-btn db-mini-pill-btn--accent"
@@ -885,7 +916,7 @@ export function MainCanvas({
                   onClick={() => onGenerateAudio(activeDoc?.id)}
                 >
                   <Headphones size={12} />
-                  <span>{audioLoading ? "Writing..." : "Generate Script"}</span>
+                  <span>{audioLoading ? "Writing..." : "Generate"}</span>
                 </button>
               </div>
 
@@ -904,8 +935,7 @@ export function MainCanvas({
               ) : (
                 <div className="db-empty-dash-box">
                   <p>
-                    Create a 2-host audio briefing script from your active
-                    document.
+                    Generate a 2-host audio briefing from your active document.
                   </p>
                 </div>
               )}

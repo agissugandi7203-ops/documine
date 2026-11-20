@@ -10,9 +10,41 @@ from app.ai.contracts import (
 )
 from app.ai.registry import build_default_routing_registry
 from app.ai.providers.openai_adapter import OpenAIProviderAdapter
+from app.core.config import settings
+from app.core.hardening import workspace_spend_cache
 from app.db.supabase_client import supabase_db
 
 T = TypeVar("T", bound=BaseModel)
+MAX_INPUT_CHARS = 48_000
+
+
+class AIBudgetExceededError(RuntimeError):
+    """Raised when a workspace exceeds its configured monthly AI spend ceiling."""
+
+
+def _bound_input_blocks(input_blocks: List[Dict[str, Any]] | str) -> List[Dict[str, Any]] | str:
+    """Prevent runaway token bills from oversized prompts (Anti-Boros guard)."""
+    if isinstance(input_blocks, str):
+        if len(input_blocks) > MAX_INPUT_CHARS:
+            return input_blocks[:MAX_INPUT_CHARS] + "\n[...truncated for token budget safety]"
+        return input_blocks
+    if isinstance(input_blocks, list):
+        bounded: List[Dict[str, Any]] = []
+        used = 0
+        for blk in input_blocks:
+            if not isinstance(blk, dict):
+                continue
+            item = dict(blk)
+            if isinstance(item.get("content"), str):
+                rem = max(0, MAX_INPUT_CHARS - used)
+                if rem == 0:
+                    break
+                if len(item["content"]) > rem:
+                    item["content"] = item["content"][:rem] + "\n[...truncated]"
+                used += len(item["content"])
+            bounded.append(item)
+        return bounded
+    return input_blocks
 
 
 def build_prompt_cache_key(workspace_id: str, task_type: AITaskType, scope_key: str = "default") -> str:
@@ -77,6 +109,27 @@ class AIGateway:
         adapter = self._llm_providers.get("openai")
         return bool(getattr(adapter, "is_configured", False))
 
+    def _enforce_workspace_budget(self, workspace_id: str) -> None:
+        """Enforce monthly AI budget cap per workspace with a 30s cached lookup (Anti-Boros)."""
+        if not workspace_id:
+            return
+        budget = float(getattr(settings, "default_monthly_ai_budget_usd", 5.0) or 0.0)
+        if budget <= 0:
+            return
+        cache_key = f"spend:{workspace_id}"
+        spent = workspace_spend_cache.get(cache_key)
+        if spent is None:
+            try:
+                logs = supabase_db.list_ai_usage(workspace_id, limit=500)
+                spent = sum(float(item.get("estimated_cost_usd") or 0.0) for item in (logs or []))
+            except Exception:
+                spent = 0.0
+            workspace_spend_cache.set(cache_key, spent, ttl_seconds=30.0)
+        if float(spent) >= budget:
+            raise AIBudgetExceededError(
+                f"Workspace AI budget limit (${budget:.2f}) reached. Deterministic local analytics remain available."
+            )
+
     def _record_telemetry(
         self,
         *,
@@ -87,6 +140,12 @@ class AIGateway:
     ) -> None:
         if not workspace_id:
             return
+        cost_inc = float(usage_meta.get("estimated_cost_usd") or 0.0)
+        if cost_inc > 0:
+            cache_key = f"spend:{workspace_id}"
+            prev = workspace_spend_cache.get(cache_key)
+            if prev is not None:
+                workspace_spend_cache.set(cache_key, float(prev) + cost_inc, ttl_seconds=30.0)
         try:
             supabase_db.log_ai_usage(
                 {
@@ -100,7 +159,7 @@ class AIGateway:
                     "cached_tokens": usage_meta.get("cached_tokens", 0),
                     "output_tokens": usage_meta.get("output_tokens", 0),
                     "reasoning_tokens": usage_meta.get("reasoning_tokens", 0),
-                    "estimated_cost_usd": usage_meta.get("estimated_cost_usd", 0.0),
+                    "estimated_cost_usd": cost_inc,
                     "latency_ms": usage_meta.get("latency_ms", 0),
                 }
             )
@@ -118,6 +177,8 @@ class AIGateway:
         response_model: Type[T],
         scope_key: str = "default",
     ) -> T:
+        self._enforce_workspace_budget(workspace_id)
+        input_blocks = _bound_input_blocks(input_blocks)
         policy = self.get_route_policy(task_type)
         cache_key = build_prompt_cache_key(workspace_id, task_type, scope_key)
 
@@ -167,6 +228,8 @@ class AIGateway:
         input_blocks: List[Dict[str, Any]] | str,
         scope_key: str = "default",
     ) -> str:
+        self._enforce_workspace_budget(workspace_id)
+        input_blocks = _bound_input_blocks(input_blocks)
         policy = self.get_route_policy(task_type)
         cache_key = build_prompt_cache_key(workspace_id, task_type, scope_key)
 
@@ -211,27 +274,47 @@ class AIGateway:
         input_blocks: List[Dict[str, Any]] | str,
         scope_key: str = "default",
     ) -> AsyncIterator[str]:
+        self._enforce_workspace_budget(workspace_id)
+        input_blocks = _bound_input_blocks(input_blocks)
         policy = self.get_route_policy(task_type)
         cache_key = build_prompt_cache_key(workspace_id, task_type, scope_key)
-        adapter = self._llm_providers.get(policy.primary_provider) or self._llm_providers["openai"]
 
-        async for item in adapter.stream_text(
-            model=policy.primary_model,
-            instructions=instructions,
-            input_blocks=input_blocks,
-            reasoning_effort=policy.reasoning_effort,
-            prompt_cache_key=cache_key,
-            store=False,
-        ):
-            if item.get("type") == "token_delta":
-                yield item["delta"]
-            elif item.get("type") == "usage" and item.get("usage"):
-                self._record_telemetry(
-                    workspace_id=workspace_id,
-                    user_id=user_id,
-                    task_type=task_type,
-                    usage_meta=item["usage"],
-                )
+        attempts = [(policy.primary_provider, policy.primary_model)]
+        if policy.fallback_model and policy.fallback_model != policy.primary_model:
+            attempts.append((policy.fallback_provider, policy.fallback_model))
+
+        last_err: Optional[Exception] = None
+        for idx, (provider_name, model_name) in enumerate(attempts):
+            adapter = self._llm_providers.get(provider_name) or self._llm_providers["openai"]
+            emitted_any = False
+            try:
+                async for item in adapter.stream_text(
+                    model=model_name,
+                    instructions=instructions,
+                    input_blocks=input_blocks,
+                    reasoning_effort=policy.reasoning_effort,
+                    prompt_cache_key=cache_key,
+                    store=False,
+                ):
+                    if item.get("type") == "token_delta":
+                        emitted_any = True
+                        yield item["delta"]
+                    elif item.get("type") == "usage" and item.get("usage"):
+                        self._record_telemetry(
+                            workspace_id=workspace_id,
+                            user_id=user_id,
+                            task_type=task_type,
+                            usage_meta=item["usage"],
+                        )
+                return
+            except Exception as err:
+                last_err = err
+                if emitted_any or idx >= len(attempts) - 1:
+                    raise
+                await asyncio.sleep(0.4)
+
+        if last_err:
+            raise last_err
 
     async def embed_texts(
         self,

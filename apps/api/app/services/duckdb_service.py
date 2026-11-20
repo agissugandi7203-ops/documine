@@ -5,7 +5,8 @@ from typing import Dict, Any, List, Optional
 
 FORBIDDEN_SQL_REGEX = re.compile(
     r"\b(DROP|DELETE|INSERT|UPDATE|ALTER|CREATE|TRUNCATE|REPLACE|GRANT|REVOKE|"
-    r"COPY|ATTACH|DETACH|PRAGMA|SET|INSTALL|LOAD|EXPORT|IMPORT|CALL|"
+    r"COPY|ATTACH|DETACH|PRAGMA|SET|INSTALL|LOAD|EXPORT|IMPORT|CALL|EXEC|EXECUTE|"
+    r"SYSTEM|SHELL|HTTPFS|DUCKDB_SETTINGS|CURRENT_SETTING|SNIFF_CSV|READ_BLOB|"
     r"READ_CSV|READ_CSV_AUTO|READ_TEXT|READ_PARQUET|READ_JSON|READ_JSON_AUTO|GLOB)\b",
     re.IGNORECASE,
 )
@@ -182,7 +183,10 @@ class WorkspaceDuckDBSandbox:
             self.table_source_names_alias(raw_name, safe_name)
             self.table_source_map[safe_name] = tbl
 
-        # 3. Lock down DuckDB external access & configuration (Invariant 5, PR-040)
+        # 3. Lock down DuckDB external access, memory, threads & configuration (Invariant 5, PR-040)
+        self.conn.execute("SET memory_limit = '128MB';")
+        self.conn.execute("SET threads = 2;")
+        self.conn.execute("SET max_temp_directory_size = '0B';")
         self.conn.execute("SET enable_external_access = false;")
         self.conn.execute("SET lock_configuration = true;")
         return self

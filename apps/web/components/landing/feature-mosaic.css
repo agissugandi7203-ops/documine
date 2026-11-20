@@ -1,5 +1,5 @@
 /* ============================================================================
-   PRODUCT FEATURE MOSAIC SECTION — Scoped design-unit (--u) composition
+   PRODUCT FEATURE MOSAIC SECTION - Scoped design-unit (--u) composition
    Reference stage: 1374 x 666 units without mutating global <html> root size.
    ============================================================================ */
 
@@ -100,7 +100,7 @@
 }
 
 /* ============================================================================
-   CARD 1 — NOTIFICATION (.fm-notif)
+   CARD 1 - NOTIFICATION (.fm-notif)
    ============================================================================ */
 .fm-notif {
   grid-column: 1;
@@ -193,7 +193,7 @@
 }
 
 /* ============================================================================
-   CARD 2 — CONNECT YOUR TOOLS (.fm-connect)
+   CARD 2 - CONNECT YOUR TOOLS (.fm-connect)
    ============================================================================ */
 .fm-connect {
   grid-column: 1;
@@ -250,12 +250,10 @@
   border-radius: calc(999 * var(--u));
   background: linear-gradient(
     180deg,
-    rgba(247, 253, 255, 0.97) 0%,
-    rgba(240, 250, 254, 0.93) 100%
+    rgba(247, 253, 255, 0.98) 0%,
+    rgba(240, 250, 254, 0.95) 100%
   );
   box-shadow: 0 0 0 calc(3 * var(--u)) rgba(0, 0, 0, 0.047);
-  backdrop-filter: blur(calc(7 * var(--u)));
-  -webkit-backdrop-filter: blur(calc(7 * var(--u)));
   font-size: calc(18 * var(--u));
   font-weight: 500;
   letter-spacing: -0.018em;
@@ -280,7 +278,7 @@
 }
 
 /* ============================================================================
-   CARD 3 — AUTOMATE YOUR WORK (.fm-automate)
+   CARD 3 - AUTOMATE YOUR WORK (.fm-automate)
    ============================================================================ */
 .fm-automate {
   grid-column: 2;
@@ -492,7 +490,7 @@
 }
 
 /* ============================================================================
-   CARD 4 — PRODUCTIVITY INSIGHTS (.fm-insights)
+   CARD 4 - PRODUCTIVITY INSIGHTS (.fm-insights)
    ============================================================================ */
 .fm-insights {
   grid-column: 3;
@@ -594,7 +592,7 @@
 }
 
 /* ============================================================================
-   CARD 5 — SEARCH (.fm-search)
+   CARD 5 - SEARCH (.fm-search)
    ============================================================================ */
 .fm-search {
   grid-column: 2 / span 2;
@@ -873,49 +871,33 @@
 }
 
 /* ============================================================================
-   ENTRANCE CHOREOGRAPHY (.motion-pending -> .entrance-run -> static)
+   ENTRANCE CHOREOGRAPHY (compositor-only opacity + transform for crisp 60/120fps)
    ============================================================================ */
-.fm-section.motion-pending .fm-card {
-  opacity: 0;
-  visibility: hidden;
-}
-
-@media (max-width: 700px) {
-  .fm-section.motion-pending .fm-insights,
-  .fm-section.motion-pending .fm-search {
-    opacity: 1;
-    visibility: visible;
-  }
+.fm-card {
+  contain: layout paint;
 }
 
 @keyframes fm-panel-settle {
   0% {
     opacity: 0;
     translate: 0 calc(12 * var(--u));
-    scale: 0.988;
-    clip-path: inset(3% round calc(22 * var(--u)));
-  }
-  62% {
-    opacity: 1;
+    scale: 0.986;
   }
   100% {
     opacity: 1;
     translate: 0 0;
     scale: 1;
-    clip-path: inset(0% round calc(22 * var(--u)));
   }
 }
 
 @keyframes fm-type-unmask {
   0% {
     opacity: 0;
-    translate: 0 calc(16 * var(--u));
-    clip-path: inset(0 0 96% 0);
+    translate: 0 calc(14 * var(--u));
   }
   100% {
     opacity: 1;
     translate: 0 0;
-    clip-path: inset(0 0 0% 0);
   }
 }
 
@@ -983,13 +965,11 @@
 @keyframes fm-chart-unmask {
   0% {
     opacity: 0;
-    translate: 0 calc(10 * var(--u));
-    clip-path: inset(100% 0 0 0);
+    translate: 0 calc(12 * var(--u));
   }
   100% {
     opacity: 1;
     translate: 0 0;
-    clip-path: inset(0 0 0 0);
   }
 }
 
@@ -1007,7 +987,7 @@
 }
 
 .fm-section.entrance-run .fm-card {
-  will-change: opacity, translate, scale, clip-path;
+  will-change: opacity, translate, scale;
 }
 
 .fm-section.entrance-run .fm-automate {
@@ -1111,15 +1091,8 @@
   animation: fm-search-resolve 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.88s backwards;
 }
 
-@media (max-width: 700px) {
-  .fm-section.entrance-run .fm-insights,
-  .fm-section.entrance-run .fm-insights .fm-tag,
-  .fm-section.entrance-run .fm-insights h2,
-  .fm-section.entrance-run .fm-insights .fm-sub,
-  .fm-section.entrance-run .fm-chart,
-  .fm-section.entrance-run .fm-search,
-  .fm-section.entrance-run .fm-search h2,
-  .fm-section.entrance-run .fm-bar-search {
+@media (max-width: 767px) {
+  .fm-section.entrance-run * {
     animation: none !important;
   }
 }

@@ -1,11 +1,27 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import Lenis from "lenis";
 import "lenis/dist/lenis.css";
 import { getCurrentUser } from "@/lib/supabase";
-import { FeatureMosaicSection } from "@/components/landing/FeatureMosaicSection";
+import { FeatureMosaicSkeleton } from "@/components/landing/FeatureMosaicSkeleton";
+
+const FeatureMosaicSection = dynamic(
+  () =>
+    import("@/components/landing/FeatureMosaicSection").then(
+      (mod) => mod.FeatureMosaicSection
+    ),
+  {
+    loading: () => <FeatureMosaicSkeleton />,
+  }
+);
+
+const CONTACT_EMAIL = "arieffajarmarhas@gmail.com";
+const WHATSAPP_NUMBER = "08814554581";
+const WHATSAPP_URL =
+  "https://wa.me/628814554581?text=Halo%20DocuMind%2C%20saya%20ingin%20bertanya%20mengenai%20platform%20ini.";
 
 // LED Dot Glyphs (7 rows each)
 const GLYPHS: Record<string, string[]> = {
@@ -81,10 +97,10 @@ interface StatItem {
 }
 
 const STATS_DATA: StatItem[] = [
-  { icon: "<", target: 120, decimals: 0, suffix: "ms", label: "Inference Time", delay: "0.5s" },
-  { icon: "%", target: 99.99, decimals: 2, suffix: "%", label: "Platform Uptime", delay: "0.58s" },
-  { icon: "*", target: 24, decimals: 0, suffix: "/7", label: "Autonomous Runtime", delay: "0.66s" },
-  { icon: "#", target: 2.4, decimals: 1, suffix: "M", label: "Context Windows", delay: "0.74s" },
+  { icon: "<", target: 120, decimals: 0, suffix: "ms", label: "Retrieval Latency", delay: "0.5s" },
+  { icon: "%", target: 99.99, decimals: 2, suffix: "%", label: "Index Uptime", delay: "0.58s" },
+  { icon: "*", target: 24, decimals: 0, suffix: "/7", label: "Live Indexing", delay: "0.66s" },
+  { icon: "#", target: 2.4, decimals: 1, suffix: "M", label: "Indexed Tokens", delay: "0.74s" },
 ];
 
 // Precompute static dot-matrix and gauge SVGs once instead of rebuilding every render
@@ -261,7 +277,7 @@ function ContactSection() {
             <div className="vexor-content">
               <h2 className="vexor-headline">Contact Us</h2>
               <p className="vexor-subhead">
-                Ready to deploy Falcon across your workflows and teams?<br />
+                Ready to bring verifiable document intelligence to your teams?<br />
                 Leave your work email and our specialists will reach out directly.
               </p>
 
@@ -319,6 +335,24 @@ function ContactSection() {
                   </button>
                 </div>
               )}
+
+              <div className="vexor-direct-links">
+                <span>Direct contact:</span>
+                <a
+                  href={`mailto:${CONTACT_EMAIL}`}
+                  className="vexor-direct-link"
+                >
+                  {CONTACT_EMAIL}
+                </a>
+                <a
+                  href={WHATSAPP_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="vexor-direct-link"
+                >
+                  WhatsApp {WHATSAPP_NUMBER}
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -358,6 +392,9 @@ export default function Home() {
   const navLockSeqRef = useRef(0);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const ensureLenisActiveRef = useRef<() => void>(() => {});
+
   useEffect(() => {
     let active = true;
     getCurrentUser()
@@ -371,7 +408,7 @@ export default function Home() {
     };
   }, []);
 
-  // Pause offscreen videos and load below-the-fold videos only near viewport
+  // Pre-warm viewport videos staggered during idle after Hero paints, then pause offscreen videos
   useEffect(() => {
     const videos = Array.from(
       document.querySelectorAll<HTMLVideoElement>("video[data-viewport-video]")
@@ -388,10 +425,41 @@ export default function Home() {
       return;
     }
 
+    const isMobileViewport =
+      window.innerWidth <= 768 ||
+      window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+
+    const warmTimers: number[] = [];
+    if (!isMobileViewport) {
+      const scheduleWarm = () => {
+        const belowFold = videos.filter((_, idx) => idx > 0);
+        belowFold.forEach((vid, i) => {
+          const tid = window.setTimeout(() => {
+            if (vid.preload === "none") {
+              vid.preload = "metadata";
+            }
+          }, 700 + i * 220);
+          warmTimers.push(tid);
+        });
+      };
+
+      if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+        (window as Window & { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback(scheduleWarm, { timeout: 1500 });
+      } else {
+        scheduleWarm();
+      }
+    }
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           const video = entry.target as HTMLVideoElement;
+          const isHeroVideo = video.classList.contains("hero-video");
+          if (isMobileViewport && !isHeroVideo) {
+            // Preserve battery & GPU decoder budget on phones: keep static high-res poster + card backdrop
+            video.pause();
+            return;
+          }
           if (entry.isIntersecting) {
             if (video.preload === "none") {
               video.preload = "metadata";
@@ -402,73 +470,106 @@ export default function Home() {
           }
         });
       },
-      { rootMargin: "240px 0px", threshold: 0.01 }
+      { rootMargin: isMobileViewport ? "180px 0px" : "520px 0px", threshold: 0.01 }
     );
 
     videos.forEach((v) => observer.observe(v));
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      warmTimers.forEach((id) => window.clearTimeout(id));
+    };
   }, []);
 
-  // rAF-throttled scroll tracker with cached DOM targets and functional bailouts
+  // Zero-reflow IntersectionObserver navigation + header visibility state (no scrollHeight/getBoundingClientRect on scroll)
   useEffect(() => {
-    const stageEl = document.getElementById("performance");
-    const capEl = document.getElementById("capabilities");
-    const contactEl = document.getElementById("contact");
-    let rafPending = false;
+    if (typeof IntersectionObserver === "undefined") return;
 
-    const evaluateScroll = () => {
-      rafPending = false;
-      const y = window.scrollY;
-      const nextScrolled = y > 30;
-      setScrolled((prev) => (prev === nextScrolled ? prev : nextScrolled));
+    const sectionPairs: Array<{
+      id: string;
+      key: "home" | "product" | "capabilities" | "contact";
+    }> = [
+      { id: "home", key: "home" },
+      { id: "performance", key: "product" },
+      { id: "capabilities", key: "capabilities" },
+      { id: "contact", key: "contact" },
+    ];
 
-      const lock = navLockRef.current;
-      if (lock) {
-        if (Date.now() < lock.until) {
-          setActiveSection((prev) => (prev === lock.section ? prev : lock.section));
-          return;
+    const keyById = new Map(sectionPairs.map((s) => [s.id, s.key]));
+    const visibleRatios = new Map<string, number>();
+
+    const sectionObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          visibleRatios.set(entry.target.id, entry.isIntersecting ? entry.intersectionRatio : 0);
         }
-        navLockRef.current = null;
+
+        const lock = navLockRef.current;
+        if (lock) {
+          if (Date.now() < lock.until) {
+            setActiveSection((prev) => (prev === lock.section ? prev : lock.section));
+            return;
+          }
+          navLockRef.current = null;
+        }
+
+        let bestKey: "home" | "product" | "capabilities" | "contact" | null = null;
+        let bestRatio = 0;
+        for (const pair of sectionPairs) {
+          const r = visibleRatios.get(pair.id) ?? 0;
+          if (r > bestRatio) {
+            bestRatio = r;
+            bestKey = pair.key;
+          }
+        }
+        if (bestKey) {
+          setActiveSection((prev) => (prev === bestKey ? prev : bestKey));
+        }
+      },
+      {
+        rootMargin: "-18% 0px -35% 0px",
+        threshold: [0, 0.15, 0.4, 0.7],
       }
+    );
 
-      const triggerY = window.innerHeight * 0.38;
-      const nearBottom =
-        window.innerHeight + y >= document.documentElement.scrollHeight - 80;
-
-      let nextSection: "home" | "product" | "capabilities" | "contact" = "home";
-      if (nearBottom || (contactEl && contactEl.getBoundingClientRect().top <= triggerY)) {
-        nextSection = "contact";
-      } else if (capEl && capEl.getBoundingClientRect().top <= triggerY) {
-        nextSection = "capabilities";
-      } else if (stageEl && stageEl.getBoundingClientRect().top <= triggerY) {
-        nextSection = "product";
+    for (const pair of sectionPairs) {
+      const target = document.getElementById(pair.id);
+      if (target) {
+        keyById.set(target.id, pair.key);
+        sectionObserver.observe(target);
       }
+    }
 
-      setActiveSection((prev) => (prev === nextSection ? prev : nextSection));
-    };
+    const sentinel = sentinelRef.current;
+    const headerObserver = sentinel
+      ? new IntersectionObserver(
+          (entries) => {
+            const topVisible = entries[0]?.isIntersecting ?? true;
+            const nextScrolled = !topVisible;
+            setScrolled((prev) => (prev === nextScrolled ? prev : nextScrolled));
+          },
+          { threshold: 0 }
+        )
+      : null;
 
-    const handleScroll = () => {
-      if (rafPending) return;
-      rafPending = true;
-      requestAnimationFrame(evaluateScroll);
-    };
+    if (sentinel && headerObserver) {
+      headerObserver.observe(sentinel);
+    }
 
     const clearLockOnManualInput = () => {
       navLockRef.current = null;
     };
 
-    window.addEventListener("scroll", handleScroll, { passive: true });
     window.addEventListener("wheel", clearLockOnManualInput, { passive: true });
     window.addEventListener("touchmove", clearLockOnManualInput, { passive: true });
-    evaluateScroll();
     return () => {
-      window.removeEventListener("scroll", handleScroll);
+      sectionObserver.disconnect();
+      headerObserver?.disconnect();
       window.removeEventListener("wheel", clearLockOnManualInput);
       window.removeEventListener("touchmove", clearLockOnManualInput);
     };
   }, []);
 
-  // Desktop-only Lenis smooth scroll (disabled for touch & reduced-motion users)
+  // Desktop-only Lenis smooth scroll with ON-DEMAND rAF (sleeps completely when idle, wakes cleanly on input)
   useEffect(() => {
     const prefersReducedMotion =
       typeof window !== "undefined" &&
@@ -483,7 +584,7 @@ export default function Home() {
     if (isMobile || prefersReducedMotion) return;
 
     const lenis = new Lenis({
-      duration: 1.05,
+      duration: 0.95,
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       orientation: "vertical",
       gestureOrientation: "vertical",
@@ -492,15 +593,50 @@ export default function Home() {
     });
     lenisRef.current = lenis;
 
-    let rafId: number;
-    function raf(time: number) {
+    let rafId = 0;
+    let running = false;
+    let idleTicks = 0;
+
+    const step = (time: number) => {
       lenis.raf(time);
-      rafId = requestAnimationFrame(raf);
-    }
-    rafId = requestAnimationFrame(raf);
+      const isMoving =
+        lenis.isScrolling || Math.abs(lenis.velocity ?? 0) > 0.005;
+      if (isMoving) {
+        idleTicks = 0;
+      } else {
+        idleTicks += 1;
+      }
+
+      if (idleTicks < 10) {
+        rafId = requestAnimationFrame(step);
+      } else {
+        running = false;
+        rafId = 0;
+      }
+    };
+
+    const wakeRaf = () => {
+      idleTicks = 0;
+      if (!running) {
+        running = true;
+        rafId = requestAnimationFrame(step);
+      }
+    };
+
+    ensureLenisActiveRef.current = wakeRaf;
+
+    window.addEventListener("wheel", wakeRaf, { passive: true });
+    window.addEventListener("scroll", wakeRaf, { passive: true });
+    window.addEventListener("keydown", wakeRaf, { passive: true });
+    window.addEventListener("pointerdown", wakeRaf, { passive: true });
 
     return () => {
-      cancelAnimationFrame(rafId);
+      ensureLenisActiveRef.current = () => {};
+      if (rafId) cancelAnimationFrame(rafId);
+      window.removeEventListener("wheel", wakeRaf);
+      window.removeEventListener("scroll", wakeRaf);
+      window.removeEventListener("keydown", wakeRaf);
+      window.removeEventListener("pointerdown", wakeRaf);
       lenisRef.current = null;
       lenis.destroy();
     };
@@ -529,6 +665,7 @@ export default function Home() {
     };
 
     if (lenisRef.current) {
+      ensureLenisActiveRef.current();
       lenisRef.current.scrollTo(targetEl, {
         offset: 0,
         duration: 1.0,
@@ -569,20 +706,20 @@ export default function Home() {
       <svg className="filter-defs" width="0" height="0" aria-hidden="true">
         <defs>
 
-          <filter id="radarSoft">
-            <feGaussianBlur stdDeviation="1.35" />
+          <filter id="radarSoft" colorInterpolationFilters="sRGB">
+            <feGaussianBlur stdDeviation="1.2" />
           </filter>
-          <filter id="radarHalo">
-            <feGaussianBlur stdDeviation="5.2" />
+          <filter id="radarHalo" colorInterpolationFilters="sRGB">
+            <feGaussianBlur stdDeviation="3" />
           </filter>
-          <filter id="gaugeBlur">
-            <feGaussianBlur stdDeviation="11" />
+          <filter id="gaugeBlur" colorInterpolationFilters="sRGB">
+            <feGaussianBlur stdDeviation="5" />
           </filter>
-          <filter id="tileSoft">
-            <feGaussianBlur stdDeviation="3.4" />
+          <filter id="tileSoft" colorInterpolationFilters="sRGB">
+            <feGaussianBlur stdDeviation="2" />
           </filter>
-          <filter id="groutSoft">
-            <feGaussianBlur stdDeviation="6.5" />
+          <filter id="groutSoft" colorInterpolationFilters="sRGB">
+            <feGaussianBlur stdDeviation="3" />
           </filter>
 
           <linearGradient
@@ -675,6 +812,18 @@ export default function Home() {
           SECTION 1: HERO ("Intelligence Designed To Evolve")
           ========================================================= */}
       <section className="hero-wrapper" id="home">
+        <div
+          ref={sentinelRef}
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: 1,
+            height: 32,
+            pointerEvents: "none",
+          }}
+        />
         <div className="hero-bg">
           <video
             className="hero-video"
@@ -719,16 +868,18 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-              <div className="trust-pill"><span>Trusted by 2000+ Enterprises</span></div>
+              <div className="trust-pill"><span>Built for Research &amp; Data Teams</span></div>
             </div>
 
             <h1 className="headline anim">
-              <span className="line">Intelligence</span>
-              <span className="line">Designed To Evolve</span>
+              <span className="line">Documents</span>
+              <span className="line">Turned Into Clarity</span>
             </h1>
 
             <p className="subhead anim" style={{ "--d": "0.28s" } as React.CSSProperties}>
-              Build applications that reason, adapt and collaborate using a modular AI platform designed for production.
+              Analyze PDFs, spreadsheets, and document repositories with
+              <br className="desktop-break" />{" "}
+              page-verified citations, visual knowledge graphs, and SQL telemetry.
             </p>
 
             <div className="cta-wrapper anim-pulse" style={{ "--d": "0.4s" } as React.CSSProperties}>
@@ -737,7 +888,7 @@ export default function Home() {
                 className="cta-btn"
                 onClick={(e) => handleSectionLinkClick(e, "performance", "product")}
               >
-                Get Started
+                Explore Platform
               </a>
             </div>
           </main>
@@ -761,11 +912,10 @@ export default function Home() {
             <span className="stage-headline__line">Performance</span>
           </h2>
           <p className="intro">
-            Every capability is engineered for speed, scale and
-            <br className="desktop-break" /> contextual understanding, giving
-            your AI the foundation
-            <br className="desktop-break" /> to reason, adapt and perform in
-            production.
+            Every query is grounded directly in your uploaded files for
+            <br className="desktop-break" /> rapid retrieval, verified accuracy,
+            and deep
+            <br className="desktop-break" /> cross-document understanding.
           </p>
         </header>
 
@@ -785,7 +935,7 @@ export default function Home() {
             />
             <div className="card__grain" aria-hidden="true" />
             <h3 className="card__title">
-              Inference Speed<br />AI Response Latency
+              Citation Retrieval<br />Sub-Second Grounding
             </h3>
 
             <svg className="gauge" viewBox="0 0 326 326" aria-hidden="true">
@@ -804,7 +954,7 @@ export default function Home() {
               <span className="metric__unit">ms</span>
             </div>
 
-            <p className="caption">Average global<br />response</p>
+            <p className="caption">Verified page<br />citation lookup</p>
             <Link href="/login" className="learn-more">Learn More</Link>
           </article>
 
@@ -823,7 +973,7 @@ export default function Home() {
             />
             <div className="card__grain" aria-hidden="true" />
             <h3 className="card__title">
-              Context Window<br />Long-form Understanding
+              Corpus Context<br />Long-Form Comprehension
             </h3>
 
             <svg className="context-backdrop" viewBox="0 0 429 554" preserveAspectRatio="none" aria-hidden="true">
@@ -855,7 +1005,7 @@ export default function Home() {
               <span className="metric__unit">M</span>
             </div>
 
-            <p className="caption">Tokens processed<br />simultaneously</p>
+            <p className="caption">Document tokens<br />indexed cleanly</p>
             <Link href="/login" className="learn-more">Learn More</Link>
           </article>
 
@@ -874,7 +1024,7 @@ export default function Home() {
             />
             <div className="card__grain" aria-hidden="true" />
             <h3 className="card__title">
-              Intelligent Connections<br />Cross-Source Context
+              Knowledge Graph<br />Semantic Relationships
             </h3>
 
             <div className="connections-map">
@@ -902,7 +1052,7 @@ export default function Home() {
               <span className="metric__unit">K</span>
             </div>
 
-            <p className="caption">Connected data<br />sources</p>
+            <p className="caption">Connected topics &amp;<br />document links</p>
             <Link href="/login" className="learn-more">Learn More</Link>
           </article>
         </div>
@@ -934,11 +1084,11 @@ export default function Home() {
                   height={38}
                   className="falcon-footer-logo"
                 />
-                <span className="falcon-footer-brand-name">FALCON</span>
+                <span className="falcon-footer-brand-name">DOCUMIND</span>
               </a>
               <p className="falcon-footer-tagline">
-                Autonomous intelligence engineered for high-speed execution,
-                enterprise scale, and connected workflows.
+                Document intelligence workspace built for page-grounded synthesis,
+                knowledge graphs, and structured analytics.
               </p>
             </div>
 
@@ -996,7 +1146,24 @@ export default function Home() {
               <div className="falcon-footer-col">
                 <h3 className="falcon-footer-col-title">CONNECT</h3>
                 <ul className="falcon-footer-list">
-                  <li><a href="mailto:hello@falcon.ai" className="falcon-footer-link">hello@falcon.ai</a></li>
+                  <li>
+                    <a
+                      href={`mailto:${CONTACT_EMAIL}`}
+                      className="falcon-footer-link"
+                    >
+                      {CONTACT_EMAIL}
+                    </a>
+                  </li>
+                  <li>
+                    <a
+                      href={WHATSAPP_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="falcon-footer-link"
+                    >
+                      WhatsApp {WHATSAPP_NUMBER}
+                    </a>
+                  </li>
                   <li>
                     <a
                       href="#performance"
@@ -1004,15 +1171,6 @@ export default function Home() {
                       onClick={(e) => handleSectionLinkClick(e, "performance", "product")}
                     >
                       Architecture
-                    </a>
-                  </li>
-                  <li>
-                    <a
-                      href="#capabilities"
-                      className="falcon-footer-link"
-                      onClick={(e) => handleSectionLinkClick(e, "capabilities", "capabilities")}
-                    >
-                      Integrations
                     </a>
                   </li>
                 </ul>
@@ -1024,14 +1182,17 @@ export default function Home() {
 
           <div className="falcon-footer-bottom">
             <span className="falcon-footer-copy">
-              &copy; 2026 Falcon. All Rights Reserved.
+              &copy; 2026 DocuMind. All Rights Reserved.
             </span>
 
             <div className="falcon-footer-socials" aria-label="Social and contact links">
               <a
-                href="#contact"
+                href={WHATSAPP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="falcon-social-btn"
-                aria-label="X"
+                title={`Chat WhatsApp (${WHATSAPP_NUMBER})`}
+                aria-label={`X / Chat via WhatsApp ${WHATSAPP_NUMBER}`}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path
@@ -1041,9 +1202,12 @@ export default function Home() {
                 </svg>
               </a>
               <a
-                href="#contact"
+                href={WHATSAPP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="falcon-social-btn"
-                aria-label="LinkedIn"
+                title={`Chat WhatsApp (${WHATSAPP_NUMBER})`}
+                aria-label={`LinkedIn / Chat via WhatsApp ${WHATSAPP_NUMBER}`}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path
@@ -1053,9 +1217,12 @@ export default function Home() {
                 </svg>
               </a>
               <a
-                href="#capabilities"
+                href={WHATSAPP_URL}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="falcon-social-btn"
-                aria-label="GitHub"
+                title={`Chat WhatsApp (${WHATSAPP_NUMBER})`}
+                aria-label={`GitHub / Chat via WhatsApp ${WHATSAPP_NUMBER}`}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path
@@ -1067,9 +1234,10 @@ export default function Home() {
                 </svg>
               </a>
               <a
-                href="mailto:hello@falcon.ai"
+                href={`mailto:${CONTACT_EMAIL}`}
                 className="falcon-social-btn"
-                aria-label="Email"
+                title={CONTACT_EMAIL}
+                aria-label={`Email ${CONTACT_EMAIL}`}
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path

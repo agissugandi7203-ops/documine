@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     default_workspace_storage_limit_mb: int = 1024
     default_monthly_ai_budget_usd: float = 5.0
     require_email_verification: bool = False
+    max_access_token_ttl_seconds: int = 86400
 
     # Local fallback upload directory
     upload_dir: str = "./uploads"

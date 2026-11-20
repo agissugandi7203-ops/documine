@@ -126,27 +126,27 @@ async def generate_podcast_briefing_script(
         script=[
             PodcastDialogueTurn(
                 speaker="Alex",
-                text=f"Hari ini kita membahas dokumen '{doc_title}'. Apa fokus utama dan temuan terpenting di dalamnya?",
+                text=f"Today we are reviewing '{doc_title}'. What are its primary focus and key findings?",
                 source_chunk_id=first_cid,
             ),
             PodcastDialogueTurn(
                 speaker="Sarah",
                 text=(
-                    f"Dokumen ini berfokus pada {topics_label}. "
-                    f"Inti pembahasannya menjelaskan: {doc_summary or first_chunk_text}"
+                    f"This document centers on {topics_label}. "
+                    f"The core overview explains: {doc_summary or first_chunk_text}"
                 ),
                 source_chunk_id=first_cid,
             ),
             PodcastDialogueTurn(
                 speaker="Alex",
-                text="Bagaimana detail bukti atau data pendukung yang disajikan di bagian isi dokumen?",
+                text="What supporting evidence or specific details are highlighted within the body sections?",
                 source_chunk_id=second_cid,
             ),
             PodcastDialogueTurn(
                 speaker="Sarah",
-                text=f"Pada bagian dokumen tercatat secara spesifik: \"{second_chunk_text}\"",
+                text=f"Specifically noted inside the source section: \"{second_chunk_text}\"",
                 source_chunk_id=second_cid,
             ),
         ],
-        takeaway_summary=doc_summary or f"Ringkasan eksekutif untuk '{doc_title}' mencakup topik {topics_label}.",
+        takeaway_summary=doc_summary or f"Executive briefing for '{doc_title}' covering {topics_label}.",
     )

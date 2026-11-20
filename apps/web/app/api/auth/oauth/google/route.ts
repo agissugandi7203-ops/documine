@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   PKCE_COOKIE,
+  PKCE_TOKEN_TTL_SEC,
   buildGoogleOAuthUrl,
   createPkcePair,
   getOriginFromRequest,
+  isSecureRequest,
 } from "@/lib/server/supabase-auth";
 
 export async function GET(req: NextRequest) {
@@ -17,8 +19,9 @@ export async function GET(req: NextRequest) {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 10,
+    secure: isSecureRequest(req),
+    maxAge: PKCE_TOKEN_TTL_SEC,
+    expires: new Date(Date.now() + PKCE_TOKEN_TTL_SEC * 1000),
   });
   return response;
 }

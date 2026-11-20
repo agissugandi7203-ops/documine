@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import uuid
 from typing import Optional, List, Dict, Any
@@ -5,6 +6,7 @@ from fastapi import APIRouter, UploadFile, File, Form, Query, BackgroundTasks, D
 from fastapi.responses import FileResponse
 
 from app.core.config import settings
+from app.core.hardening import analytics_report_cache, sanitize_header_filename
 from app.core.workspace import WorkspaceContext, get_verified_workspace_context
 from app.db.supabase_client import supabase_db
 from app.models.schemas import DocumentInfo, DocumentChunk, DocumentUpdateRequest, BoundingBox
@@ -113,6 +115,23 @@ async def get_repository_summary(
     }
 
 
+async def _read_upload_bounded(file: UploadFile, max_bytes: int) -> bytes:
+    """Stream upload in 1MB chunks and abort immediately if file exceeds max_bytes (anti-RAM-exhaustion)."""
+    chunk_size = 1024 * 1024
+    buf = bytearray()
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        buf.extend(chunk)
+        if len(buf) > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File size exceeds the {settings.max_upload_size_mb} MB upload limit.",
+            )
+    return bytes(buf)
+
+
 @router.post("/upload", response_model=DocumentInfo)
 async def upload_document(
     background_tasks: BackgroundTasks,
@@ -123,10 +142,14 @@ async def upload_document(
 ):
     """
     Stages 1 & 2 Synchronous Upload & Validation + Asynchronous 15-Stage Pipeline Dispatch (DOC-10).
+    Uses bounded chunked reads, storage quota checks, and non-blocking thread offload for fast uploads.
     """
-    file_bytes = await file.read()
+    max_bytes = int(settings.max_upload_size_mb) * 1024 * 1024
+    file_bytes = await _read_upload_bounded(file, max_bytes)
     try:
-        validated = pdf_processor.validate_upload_bytes(file.filename or "", file_bytes)
+        validated = await asyncio.to_thread(
+            pdf_processor.validate_upload_bytes, file.filename or "", file_bytes
+        )
     except ValueError as exc:
         msg = str(exc)
         status_code = 422 if ("encrypted" in msg.lower() or "password" in msg.lower()) else 400
@@ -137,6 +160,21 @@ async def upload_document(
     if existing and not force_replace:
         return _row_to_document_info(existing, is_duplicate=True)
 
+    # Enforce workspace storage quota (anti-spam / anti-boros storage protection)
+    storage_limit_bytes = int(settings.default_workspace_storage_limit_mb) * 1024 * 1024
+    existing_docs = supabase_db.list_workspace_documents(ctx.workspace_id)
+    used_bytes = sum(int(d.get("file_size_bytes") or 0) for d in existing_docs)
+    if existing and force_replace:
+        used_bytes = max(0, used_bytes - int(existing.get("file_size_bytes") or 0))
+    if used_bytes + len(file_bytes) > storage_limit_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Workspace storage limit ({settings.default_workspace_storage_limit_mb} MB) reached. "
+                "Delete unused files before uploading."
+            ),
+        )
+
     if existing and force_replace:
         doc_id = str(existing["id"])
         next_version = int(existing.get("ingestion_version") or 1) + 1
@@ -144,7 +182,8 @@ async def upload_document(
         doc_id = str(uuid.uuid4())
         next_version = 1
 
-    storage_path, local_path = storage_service.save_document_bytes(
+    storage_path, local_path = await asyncio.to_thread(
+        storage_service.save_document_bytes,
         workspace_id=ctx.workspace_id,
         doc_id=doc_id,
         filename=file.filename or "document.pdf",
@@ -182,6 +221,7 @@ async def upload_document(
         run_inline_if_no_bg=True,
     )
 
+    analytics_report_cache.invalidate_prefix(f"an:{ctx.workspace_id}:")
     latest_doc = supabase_db.get_workspace_document(ctx.workspace_id, doc_id) or doc_row
     return _row_to_document_info(latest_doc)
 
@@ -244,6 +284,7 @@ async def update_document_metadata(
         updates["user_tags"] = [t.strip() for t in req.user_tags if t and t.strip()]
 
     updated = supabase_db.update_document(ctx.workspace_id, document_id, updates) or {**doc, **updates}
+    analytics_report_cache.invalidate_prefix(f"an:{ctx.workspace_id}:")
     return _row_to_document_info(updated)
 
 
@@ -305,11 +346,20 @@ async def get_document_file(
         raise HTTPException(status_code=404, detail="Document binary missing in storage.")
 
     media_type = doc.get("mime_type") or "application/pdf"
-    safe_title = (doc.get("original_filename") or doc.get("title") or "document.pdf").replace('"', "")
+    safe_title = sanitize_header_filename(
+        doc.get("original_filename") or doc.get("title") or "document.pdf"
+    )
+    headers = {
+        "Content-Disposition": f'inline; filename="{safe_title}"',
+        "Cache-Control": "private, max-age=300",
+    }
+    file_sha = doc.get("file_sha256")
+    if file_sha:
+        headers["ETag"] = f'"{file_sha[:32]}"'
     return FileResponse(
         path=local_path,
         media_type=media_type,
-        headers={"Content-Disposition": f'inline; filename="{safe_title}"'},
+        headers=headers,
     )
 
 
@@ -366,6 +416,7 @@ async def delete_document(
         except Exception:
             pass
 
+    analytics_report_cache.invalidate_prefix(f"an:{ctx.workspace_id}:")
     return {
         "deleted": True,
         "id": document_id,

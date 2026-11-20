@@ -1,21 +1,27 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
-
-const plusJakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-jakarta",
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["500", "600"],
-  variable: "--font-mono",
-});
+import { SITE_NAME } from "@/lib/site-metadata";
+import "./dashboard.mobile.css";
+import "./chat.css";
+import "./analytics.css";
+import "./executive-home.css";
 
 export const metadata: Metadata = {
-  title: "DocuMind — Workspace Dashboard",
-  description: "Original tactile document intelligence workspace.",
+  title: "Workspace Dashboard",
+  description:
+    "Explore documents, cited AI reasoning, knowledge graphs, SQL analytics, and integrated PDF files in DocuMind.",
+  openGraph: {
+    title: `Workspace Dashboard | ${SITE_NAME}`,
+    description:
+      "Explore documents, cited AI reasoning, knowledge graphs, and integrated PDF files in DocuMind.",
+    images: ["/opengraph-image"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `Workspace Dashboard | ${SITE_NAME}`,
+    description:
+      "Explore documents, cited AI reasoning, knowledge graphs, and integrated PDF files in DocuMind.",
+    images: ["/twitter-image"],
+  },
 };
 
 export default function DashboardLayout({
@@ -23,9 +29,5 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return (
-    <div className={`${plusJakarta.variable} ${jetbrainsMono.variable}`}>
-      {children}
-    </div>
-  );
+  return <div className="db-font-root">{children}</div>;
 }

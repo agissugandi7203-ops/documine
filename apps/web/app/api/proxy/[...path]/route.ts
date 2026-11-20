@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  ACCESS_COOKIE,
   REFRESH_COOKIE,
+  capSessionMetadataCookies,
+  clearAuthCookies,
+  resolveServerSession,
   setAuthCookies,
-  supabaseGetUser,
-  supabaseRefreshSession,
 } from "@/lib/server/supabase-auth";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const FASTAPI_URL = (
   process.env.FASTAPI_URL ||
@@ -18,77 +22,118 @@ async function handleProxy(
   context: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await context.params;
-  let accessToken = req.cookies.get(ACCESS_COOKIE)?.value;
-  const refreshToken = req.cookies.get(REFRESH_COOKIE)?.value;
-  let refreshedSession:
-    | { access_token: string; refresh_token?: string; expires_in?: number }
-    | null = null;
+  let session = await resolveServerSession(req, {
+    verifyAccessWithProvider: false,
+  });
 
-  if (accessToken) {
-    const check = await supabaseGetUser(accessToken);
-    if (!check.ok) {
-      accessToken = undefined;
-    }
-  }
-
-  if (!accessToken && refreshToken) {
-    const refreshed = await supabaseRefreshSession(refreshToken);
-    if (refreshed.ok && refreshed.data?.access_token) {
-      accessToken = refreshed.data.access_token;
-      refreshedSession = refreshed.data;
-    }
-  }
-
-  if (!accessToken) {
-    return NextResponse.json(
-      { detail: "Authentication required." },
+  if (!session.authenticated || !session.accessToken) {
+    const unauth = NextResponse.json(
+      { detail: "Authentication required or session expired." },
       { status: 401 }
     );
+    clearAuthCookies(unauth, req);
+    return unauth;
   }
 
+  let activeAccessToken = session.accessToken;
   const targetPath = path.map((seg) => encodeURIComponent(seg)).join("/");
   const targetUrl = `${FASTAPI_URL}/api/${targetPath}${req.nextUrl.search}`;
 
-  const headers = new Headers();
-  const contentType = req.headers.get("content-type");
-  if (contentType) {
-    headers.set("content-type", contentType);
-  }
-  const workspaceHeader = req.headers.get("x-workspace-id");
-  if (workspaceHeader) {
-    headers.set("x-workspace-id", workspaceHeader);
-  }
-  headers.set("authorization", `Bearer ${accessToken}`);
+  const rawBody =
+    req.method !== "GET" && req.method !== "HEAD"
+      ? await req.arrayBuffer()
+      : undefined;
 
-  const init: RequestInit = {
-    method: req.method,
-    headers,
-    cache: "no-store",
+  const buildUpstreamInit = (token: string): RequestInit => {
+    const headers = new Headers();
+    const contentType = req.headers.get("content-type");
+    if (contentType) {
+      headers.set("content-type", contentType);
+    }
+    const acceptHeader = req.headers.get("accept");
+    if (acceptHeader) {
+      headers.set("accept", acceptHeader);
+    }
+    const workspaceHeader = req.headers.get("x-workspace-id");
+    if (workspaceHeader) {
+      headers.set("x-workspace-id", workspaceHeader);
+    }
+    headers.set("authorization", `Bearer ${token}`);
+    return {
+      method: req.method,
+      headers,
+      body: rawBody,
+      cache: "no-store",
+    };
   };
 
-  if (req.method !== "GET" && req.method !== "HEAD") {
-    init.body = await req.arrayBuffer();
-  }
-
   try {
-    const upstream = await fetch(targetUrl, init);
+    let upstream = await fetch(targetUrl, buildUpstreamInit(activeAccessToken));
+
+    // If upstream FastAPI rejected the token (e.g., revoked before exp) and we haven't refreshed yet, force one refresh + retry
+    if (upstream.status === 401 && !session.refreshedSession) {
+      const forced = await resolveServerSession(req, {
+        forceRefresh: true,
+        verifyAccessWithProvider: false,
+      });
+      if (forced.authenticated && forced.accessToken) {
+        session = forced;
+        activeAccessToken = forced.accessToken;
+        upstream = await fetch(targetUrl, buildUpstreamInit(activeAccessToken));
+      } else {
+        const expired = NextResponse.json(
+          { detail: "Session expired. Please sign in again." },
+          { status: 401 }
+        );
+        clearAuthCookies(expired, req);
+        return expired;
+      }
+    }
+
+    const applySessionCookies = async (res: NextResponse) => {
+      if (upstream.status === 401) {
+        clearAuthCookies(res, req);
+        return;
+      }
+      if (session.refreshedSession) {
+        await setAuthCookies(res, session.refreshedSession, req, {
+          existingSessionExpEpoch: session.sessionExpEpoch,
+        });
+      } else if (session.persistLegacyCap && session.sessionExpEpoch) {
+        await capSessionMetadataCookies(
+          res,
+          req,
+          session.sessionExpEpoch,
+          req.cookies.get(REFRESH_COOKIE)?.value
+        );
+      }
+    };
+
     const outHeaders = new Headers();
     const upstreamType = upstream.headers.get("content-type") || "";
     if (upstreamType) {
       outHeaders.set("content-type", upstreamType);
     }
+    const upstreamDisposition = upstream.headers.get("content-disposition");
+    if (upstreamDisposition) {
+      outHeaders.set("content-disposition", upstreamDisposition);
+    }
+    const upstreamLength = upstream.headers.get("content-length");
+    if (upstreamLength) {
+      outHeaders.set("content-length", upstreamLength);
+    }
 
     // Pass-through SSE streams without buffering into an ArrayBuffer
     if (upstreamType.includes("text/event-stream") && upstream.body) {
+      outHeaders.set("content-type", "text/event-stream; charset=utf-8");
       outHeaders.set("cache-control", "no-cache, no-transform");
       outHeaders.set("connection", "keep-alive");
+      outHeaders.set("x-accel-buffering", "no");
       const streamRes = new NextResponse(upstream.body, {
         status: upstream.status,
         headers: outHeaders,
       });
-      if (refreshedSession) {
-        setAuthCookies(streamRes, refreshedSession, req);
-      }
+      await applySessionCookies(streamRes);
       return streamRes;
     }
 
@@ -97,13 +142,12 @@ async function handleProxy(
       status: upstream.status,
       headers: outHeaders,
     });
-    if (refreshedSession) {
-      setAuthCookies(res, refreshedSession, req);
-    }
+    await applySessionCookies(res);
     return res;
-  } catch {
+  } catch (err) {
+    console.error("[Proxy Upstream Error]", targetPath, err);
     return NextResponse.json(
-      { detail: "Backend API is currently unreachable." },
+      { detail: "Service connection is temporarily busy. Please try again in a moment." },
       { status: 502 }
     );
   }

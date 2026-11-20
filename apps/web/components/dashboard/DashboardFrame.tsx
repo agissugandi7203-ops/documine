@@ -3,25 +3,17 @@
 import React from "react";
 
 interface DashboardFrameProps {
-  sidebarCollapsed?: boolean;
   children: React.ReactNode;
 }
 
 /**
- * Full-viewport editorial workspace shell supporting smooth sidebar collapse/expand.
+ * Full-viewport editorial flex workspace shell allowing the animated sidebar
+ * and central Bento canvas to resize smoothly in tandem.
  */
-export function DashboardFrame({
-  sidebarCollapsed = false,
-  children,
-}: DashboardFrameProps) {
+export function DashboardFrame({ children }: DashboardFrameProps) {
   return (
     <div className="db-frame-bezel">
-      <main
-        className={`db-frame-cavity ${
-          sidebarCollapsed ? "db-frame-cavity--collapsed" : ""
-        }`}
-        aria-label="Workspace Dashboard"
-      >
+      <main className="db-frame-cavity" aria-label="Workspace Dashboard">
         {children}
       </main>
     </div>

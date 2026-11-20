@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Signal — Authentication",
-  description: "Completing your authentication session.",
+  title: "Authentication",
+  description: "Completing your DocuMind authentication session.",
 };
 
 export default function AuthCallbackLayout({

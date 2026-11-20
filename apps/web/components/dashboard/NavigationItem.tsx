@@ -12,8 +12,8 @@ interface NavigationItemProps {
 }
 
 /**
- * Sidebar navigation button supporting both expanded pill-row and
- * compact minimized icon rail modes.
+ * Simple, distortion-free sidebar navigation button with anchored 20px icon
+ * and smooth CSS label fade.
  */
 export function NavigationItem({
   id,
@@ -37,7 +37,9 @@ export function NavigationItem({
       <span className="db-nav-item-icon" aria-hidden="true">
         {icon}
       </span>
-      {!collapsed && <span className="db-nav-item-label">{label}</span>}
+      <span className="db-nav-item-label" aria-hidden={collapsed}>
+        {label}
+      </span>
     </button>
   );
 }

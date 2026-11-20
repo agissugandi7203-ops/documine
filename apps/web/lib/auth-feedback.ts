@@ -99,8 +99,18 @@ export function mapLoginUrlFeedback(
 ): Omit<AuthNotice, "id"> | null {
   const urlError = params.get("error")?.trim();
   const urlMessage = params.get("message")?.trim();
+  const reason = params.get("reason")?.trim();
   const verified = params.get("verified");
   const reset = params.get("reset");
+
+  if (reason === "session_expired") {
+    return {
+      variant: "info",
+      title: "Session expired",
+      message:
+        "Your session timed out or reached its expiration limit. Please sign in again.",
+    };
+  }
 
   if (urlError) {
     const lower = urlError.toLowerCase();

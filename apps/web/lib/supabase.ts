@@ -170,7 +170,75 @@ export async function signOut(): Promise<void> {
   await authFetch("/api/auth/logout", { method: "POST" });
 }
 
-export async function getCurrentUser(): Promise<AuthUser | null> {
+export interface AuthSessionDetails {
+  user: AuthUser;
+  expiresAt: number | null;
+  sessionExpiresAt: number | null;
+  idleExpiresAt: number | null;
+}
+
+let inflightClientRefresh: Promise<{
+  authenticated: boolean;
+  expiresAt: number | null;
+  sessionExpiresAt: number | null;
+  idleExpiresAt: number | null;
+}> | null = null;
+
+export async function refreshAuthSession(force = false): Promise<{
+  authenticated: boolean;
+  expiresAt: number | null;
+  sessionExpiresAt: number | null;
+  idleExpiresAt: number | null;
+}> {
+  if (inflightClientRefresh) {
+    return inflightClientRefresh;
+  }
+
+  inflightClientRefresh = (async () => {
+    try {
+      const res = await fetch("/api/auth/refresh", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force }),
+      });
+      if (!res.ok) {
+        return {
+          authenticated: false,
+          expiresAt: null,
+          sessionExpiresAt: null,
+          idleExpiresAt: null,
+        };
+      }
+      const data = (await res.json()) as {
+        authenticated?: boolean;
+        expiresAt?: number | null;
+        sessionExpiresAt?: number | null;
+        idleExpiresAt?: number | null;
+      };
+      return {
+        authenticated: Boolean(data.authenticated),
+        expiresAt: data.expiresAt ?? null,
+        sessionExpiresAt: data.sessionExpiresAt ?? null,
+        idleExpiresAt: data.idleExpiresAt ?? null,
+      };
+    } catch {
+      return {
+        authenticated: false,
+        expiresAt: null,
+        sessionExpiresAt: null,
+        idleExpiresAt: null,
+      };
+    } finally {
+      inflightClientRefresh = null;
+    }
+  })();
+
+  return inflightClientRefresh;
+}
+
+export async function getCurrentSessionDetails(): Promise<AuthSessionDetails | null> {
   try {
     const res = await fetch("/api/auth/me", {
       method: "GET",
@@ -181,11 +249,25 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     const data = (await res.json()) as {
       authenticated?: boolean;
       user?: AuthUser | null;
+      expiresAt?: number | null;
+      sessionExpiresAt?: number | null;
+      idleExpiresAt?: number | null;
     };
-    return data.authenticated && data.user ? data.user : null;
+    if (!data.authenticated || !data.user) return null;
+    return {
+      user: data.user,
+      expiresAt: data.expiresAt ?? null,
+      sessionExpiresAt: data.sessionExpiresAt ?? null,
+      idleExpiresAt: data.idleExpiresAt ?? null,
+    };
   } catch {
     return null;
   }
+}
+
+export async function getCurrentUser(): Promise<AuthUser | null> {
+  const details = await getCurrentSessionDetails();
+  return details ? details.user : null;
 }
 
 export async function getCurrentSession(): Promise<{ user: AuthUser } | null> {

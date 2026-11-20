@@ -1,0 +1,1097 @@
+/* =========================================================
+   DOCUMIND DASHBOARD - DEDICATED MOBILE & TABLET STYLES
+   Isolated from dashboard.css so desktop work by other agents
+   stays 100% untouched. Desktop (>= 1024px) has zero overrides.
+   ========================================================= */
+
+/* Keep mobile bottom bar hidden on desktop viewports */
+.db-mobile-bottom-nav {
+  display: none;
+}
+
+/* =========================================================
+   TABLET & MOBILE WORKSPACE (< 1024px)
+   - Moves navigation into fixed bottom bar
+   - Hides bulky right-sidebar card decks & progress steps
+   - Surfaces compact Search pill cleanly near top
+   - Makes all 7 sections + CRUD tables responsive
+   ========================================================= */
+@media (max-width: 1023px) {
+  .db-viewport {
+    height: auto;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .db-viewport .db-frame-bezel {
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  .db-viewport .db-frame-cavity {
+    height: auto;
+    min-height: 100dvh;
+    padding: 18px 16px calc(104px + env(safe-area-inset-bottom));
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  /* Visual order on mobile: Top Bar -> Compact Search -> Main Stage */
+  .db-viewport .db-sidebar {
+    order: 0;
+  }
+
+  .db-viewport .db-right-column,
+  .db-viewport .db-right-column--collapsed {
+    order: 1;
+    width: 100%;
+    height: auto;
+    gap: 0;
+  }
+
+  .db-viewport .db-right-column:not(:has(.db-right-search-row)) {
+    display: none !important;
+  }
+
+  .db-viewport .db-main-workspace,
+  .db-viewport .db-main-canvas {
+    order: 2;
+    flex: none;
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    gap: 18px;
+  }
+
+  /* ---------------------------------------------------------
+     Remove obstructing 3-slot left bento panel & right-sidebar
+     card stacks on mobile so main stage fits cleanly
+     --------------------------------------------------------- */
+  .db-viewport .db-investments-card,
+  .db-viewport .db-preview-section .db-section-subbar,
+  .db-viewport .db-preview-section .db-preview-stack,
+  .db-viewport .db-preview-section .db-card-min-btn,
+  .db-viewport .db-progress-card,
+  .db-viewport .db-layer-panel,
+  .db-viewport .db-right-collapsed-dock {
+    display: none !important;
+  }
+
+  .db-viewport .db-preview-section,
+  .db-viewport .db-preview-section--minimized {
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    gap: 0;
+  }
+
+  .db-viewport .db-right-search-row {
+    width: 100%;
+    gap: 0;
+  }
+
+  .db-viewport .db-right-search-pill {
+    width: 100%;
+    height: 40px;
+    border-radius: 14px;
+  }
+
+  /* Top Mobile Unified Header Bar (Brand + Notifications + Profile in one bar) */
+  .db-viewport .db-sidebar,
+  .db-viewport .db-sidebar--collapsed {
+    position: relative;
+    z-index: 90;
+    width: 100% !important;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    height: auto;
+    gap: 10px;
+    padding: 6px 10px;
+    border-radius: 18px;
+    background: #ffffff;
+    border: 1px solid #e2dfd7;
+    box-shadow: 0 4px 16px rgba(24, 24, 27, 0.05);
+  }
+
+  .db-viewport .db-sidebar-top,
+  .db-viewport .db-sidebar--collapsed .db-sidebar-top {
+    flex-direction: row;
+    width: auto;
+    height: 40px !important;
+    min-height: 40px;
+    padding: 0 4px;
+    border-radius: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    gap: 0;
+  }
+
+  .db-viewport .db-sidebar--collapsed .db-brand-btn {
+    gap: 9px;
+  }
+
+  .db-viewport .db-brand-title,
+  .db-viewport .db-sidebar--collapsed .db-brand-title {
+    display: inline-block !important;
+    max-width: 140px !important;
+    opacity: 1 !important;
+  }
+
+  .db-viewport .db-sidebar-toggle-btn,
+  .db-viewport .db-sidebar-sections,
+  .db-viewport .db-sidebar-corpus-card,
+  .db-viewport .db-sidebar-storage-card,
+  .db-viewport .db-sidebar-storage-mini,
+  .db-viewport .db-brand-edition,
+  .db-viewport .db-profile-info,
+  .db-viewport .db-profile-chevron-wrap,
+  .db-viewport .db-notif-btn .db-nav-item-label {
+    display: none !important;
+  }
+
+  .db-viewport .db-sidebar-capsule,
+  .db-viewport .db-sidebar--collapsed .db-sidebar-capsule {
+    flex: 0 0 auto;
+    width: auto;
+    height: 40px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    gap: 8px;
+  }
+
+  .db-viewport .db-sidebar-footer,
+  .db-viewport .db-sidebar--collapsed .db-sidebar-footer {
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+    padding-top: 0;
+    border-top: none;
+    gap: 8px;
+  }
+
+  .db-viewport .db-notif-anchor,
+  .db-viewport .db-profile-anchor {
+    position: static;
+    width: auto;
+  }
+
+  .db-viewport .db-notif-btn,
+  .db-viewport .db-profile-btn,
+  .db-viewport .db-profile-btn--collapsed {
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border-radius: 999px;
+    gap: 0;
+    justify-content: center;
+  }
+
+  .db-viewport .db-profile-btn,
+  .db-viewport .db-profile-btn--collapsed {
+    padding: 2px;
+  }
+
+  .db-viewport .db-avatar-frame {
+    width: 32px;
+    height: 32px;
+  }
+
+  .db-viewport .db-account-popover,
+  .db-viewport .db-notif-popover {
+    position: absolute;
+    left: auto;
+    right: 0;
+    top: calc(100% + 8px);
+    bottom: auto;
+    width: min(340px, 100%);
+    max-width: 100%;
+    margin: 0;
+    z-index: 98;
+  }
+
+  /* Fixed Bottom Navigation Bar (solid surface avoids expensive per-frame mobile blur resampling) */
+  .db-viewport .db-mobile-bottom-nav {
+    position: fixed;
+    left: 14px;
+    right: 14px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    z-index: 80;
+    display: block;
+    border-radius: 22px;
+    background: #ffffff;
+    border: 1px solid #e2dfd7;
+    box-shadow: 0 12px 32px rgba(24, 24, 27, 0.12),
+      0 2px 6px rgba(24, 24, 27, 0.04);
+    padding: 7px;
+  }
+
+  .db-viewport .db-mobile-bottom-nav-track {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: center;
+    gap: 6px;
+  }
+
+  .db-viewport .db-mobile-nav-btn {
+    position: relative;
+    min-width: 0;
+    width: 100%;
+    min-height: 50px;
+    border: none;
+    background: transparent;
+    color: #6b6a65;
+    border-radius: 16px;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    cursor: pointer;
+    transition: background-color 0.16s ease, color 0.16s ease,
+      transform 0.12s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .db-viewport .db-mobile-nav-btn:active {
+    transform: scale(0.96);
+  }
+
+  .db-viewport .db-mobile-nav-btn--active {
+    background: #18181b;
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(24, 24, 27, 0.16);
+  }
+
+  .db-viewport .db-mobile-nav-btn--active::after {
+    content: "";
+    position: absolute;
+    top: 5px;
+    right: 7px;
+    width: 4px;
+    height: 4px;
+    border-radius: 999px;
+    background: #e85a24;
+  }
+
+  .db-viewport .db-mobile-nav-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+  }
+
+  .db-viewport .db-mobile-nav-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+
+  /* Main Stage & Greeting Reflow */
+  .db-viewport .db-stage-scroll,
+  .db-viewport .db-stage-scroll--locked {
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .db-viewport .db-greeting-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    padding: 4px 2px 6px;
+  }
+
+  .db-viewport .db-greeting-title-line {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .db-viewport .db-greeting-title {
+    font-size: clamp(21px, 5.4vw, 25px);
+  }
+
+  .db-viewport .db-header-controls {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .db-viewport .db-greeting-row--minimal {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .db-viewport .db-global-search-wrap {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .db-viewport .db-global-search-pill {
+    width: 100%;
+    height: 44px;
+    padding: 0 12px 0 14px;
+  }
+
+  .db-viewport .db-search-popover {
+    width: 100%;
+    left: 0;
+    right: 0;
+    max-height: 60dvh;
+    padding: 4px;
+  }
+
+  .db-viewport .repo-split-resizer,
+  .db-viewport .repo-desktop-ai-bar,
+  .db-viewport .repo-desktop-ai-minimized-pill,
+  .db-viewport .repo-float-resize,
+  .db-viewport .repo-desktop-resize-btn {
+    display: none !important;
+  }
+
+  .db-viewport .repo-ide-shell {
+    flex-direction: column;
+    height: auto;
+    min-height: 580px;
+    gap: 16px;
+    border: none;
+    background: transparent;
+    overflow: visible;
+  }
+
+  .db-viewport .repo-ide-shell.is-repo-primary .repo-explorer,
+  .db-viewport .repo-ide-shell.has-open-file .repo-explorer,
+  .db-viewport .repo-explorer {
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    max-height: 310px;
+    border: 1px solid #e2dfd7;
+    border-radius: 18px;
+    overflow: hidden;
+  }
+
+  /* Repo Default Mode Mobile: Repo gets full stage; AI lives inside pop-up */
+  .db-viewport .repo-ide-shell.is-repo-primary {
+    min-height: calc(100dvh - 220px);
+  }
+
+  .db-viewport .repo-ide-shell.is-repo-primary .repo-explorer {
+    flex: 1 1 auto;
+    width: 100%;
+    max-height: none;
+    min-height: 440px;
+  }
+
+  .db-viewport .repo-ide-shell.is-repo-primary:not(.is-mobile-ai-open) .repo-stage-pane {
+    display: none !important;
+  }
+
+  .db-viewport .repo-mobile-ai-icon-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: 1px solid #e2dfd7;
+    background: #18181b;
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    margin-left: 2px;
+  }
+
+  .db-viewport .repo-mobile-ai-fab {
+    position: fixed;
+    right: 16px;
+    bottom: calc(86px + env(safe-area-inset-bottom));
+    z-index: 82;
+    height: 44px;
+    padding: 0 16px;
+    border-radius: 999px;
+    border: 1px solid #2b2b30;
+    background: #18181b;
+    color: #ffffff;
+    font-size: 12.5px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 12px 28px rgba(24, 24, 27, 0.24);
+    cursor: pointer;
+  }
+
+  .db-viewport .repo-ide-shell.is-mobile-ai-open .repo-mobile-ai-fab {
+    display: none !important;
+  }
+
+  .db-viewport .repo-mobile-ai-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    background: rgba(24, 24, 27, 0.44);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  .db-viewport .repo-ide-shell.is-repo-primary.is-mobile-ai-open .repo-stage-pane {
+    display: flex !important;
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    z-index: 125;
+    width: auto;
+    height: 70dvh;
+    max-height: 92dvh;
+    max-width: none;
+    min-height: 0;
+    border: 1px solid #e2dfd7;
+    border-bottom: none;
+    border-radius: 22px 22px 0 0;
+    background: #faf9f5;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    box-shadow: 0 -18px 54px rgba(24, 24, 27, 0.24);
+    overflow: hidden;
+    transition:
+      height 240ms cubic-bezier(0.22, 1, 0.36, 1),
+      max-height 240ms cubic-bezier(0.22, 1, 0.36, 1),
+      border-radius 200ms ease,
+      transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .db-viewport .repo-ide-shell.is-repo-primary.is-mobile-ai-open.is-mobile-ai-full .repo-stage-pane {
+    top: 0;
+    bottom: 0;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border: none;
+    padding-top: env(safe-area-inset-top);
+    z-index: 130;
+  }
+
+  .db-viewport .repo-ide-shell.is-repo-primary.is-mobile-ai-open .repo-default-chat-host {
+    padding: 0 14px 12px;
+    border-left: none;
+    background: #faf9f5;
+  }
+
+  .db-viewport .repo-sheet-grabber {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 0 4px;
+    cursor: grab;
+    touch-action: none;
+    flex-shrink: 0;
+  }
+
+  .db-viewport .repo-sheet-grabber:active {
+    cursor: grabbing;
+  }
+
+  .db-viewport .repo-sheet-grabber-pill {
+    width: 44px;
+    height: 5px;
+    border-radius: 999px;
+    background: #cfcabe;
+  }
+
+  .db-viewport .repo-mobile-ai-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 2px 10px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid #e6e3da;
+    flex-shrink: 0;
+  }
+
+  .db-viewport .repo-mobile-ai-head-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .db-viewport .repo-mobile-ai-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #18181b;
+  }
+
+  .db-viewport .repo-mobile-ai-close {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    border: 1px solid #e2dfd7;
+    background: #ffffff;
+    color: #18181b;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .db-viewport .repo-explorer-head {
+    padding: 12px 14px 10px;
+  }
+
+  .db-viewport .repo-folder-btn,
+  .db-viewport .repo-file-btn {
+    padding: 7px 4px;
+    gap: 8px;
+  }
+
+  .db-viewport .repo-ide-shell.is-repo-primary .repo-stage-pane,
+  .db-viewport .repo-ide-shell.has-open-file .repo-stage-pane,
+  .db-viewport .repo-stage-pane {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 480px;
+    border: 1px solid #e2dfd7;
+    border-radius: 18px;
+    overflow: hidden;
+  }
+
+  .db-viewport .repo-default-chat-host {
+    padding: 14px;
+  }
+
+  .db-viewport .repo-editor-tabs {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .db-viewport .repo-editor-tools {
+    gap: 8px;
+  }
+
+  .db-viewport .repo-viewer-canvas {
+    min-height: 400px;
+  }
+
+  .db-viewport .repo-bottom-chat-dock {
+    padding: 10px 12px 12px;
+    gap: 8px;
+  }
+
+  .db-viewport .db-floating-upload-pill {
+    bottom: 92px;
+    right: 14px;
+    left: 14px;
+    max-width: none;
+    padding: 8px 12px 8px 14px;
+  }
+
+  .db-viewport:has(.repo-ide-shell.is-repo-primary:not(.is-mobile-ai-open))
+    .db-floating-upload-pill {
+    bottom: 140px;
+  }
+
+  .db-viewport .db-dialog-backdrop {
+    padding: 18px;
+  }
+
+  .db-viewport .db-dialog-card {
+    padding: 22px 20px;
+    gap: 16px;
+  }
+
+  .db-viewport .db-upload-task-list {
+    gap: 10px;
+  }
+
+  .db-viewport .db-upload-task-row {
+    padding: 12px;
+    gap: 9px;
+  }
+
+  .db-viewport .db-quick-actions-bar {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  /* Homes Bento Layout - Spacious Mobile Stacking */
+  .db-viewport .db-homes-layout {
+    height: auto;
+    grid-template-rows: auto;
+    overflow: visible;
+    gap: 18px;
+  }
+
+  .db-viewport .db-top-bento-row,
+  .db-viewport .db-bottom-bento-row,
+  .db-viewport .db-hero-bento-row,
+  .db-viewport .db-homes-split,
+  .db-viewport .db-search-hits {
+    grid-template-columns: 1fr;
+    height: auto;
+    gap: 18px;
+  }
+
+  .db-viewport .db-rect-card {
+    height: auto;
+    overflow: visible;
+    padding: 18px 16px;
+    gap: 14px;
+    border-radius: 18px;
+  }
+
+  .db-viewport .db-rect-card-head {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .db-viewport .db-rect-chart-well {
+    min-width: 0;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .db-viewport .db-kpi-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    height: auto;
+    gap: 14px;
+  }
+
+  .db-viewport .db-kpi-card {
+    height: auto;
+    min-height: 118px;
+    padding: 16px 18px;
+    border-radius: 18px;
+  }
+
+  .db-viewport .db-hero-sage-card {
+    height: auto;
+    min-height: 270px;
+    padding: 18px;
+    border-radius: 20px;
+  }
+
+  .db-viewport .db-hero-sage-head {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .db-viewport .db-hero-chart-wrap {
+    min-height: 195px;
+  }
+
+  .db-viewport .db-hero-echarts-host {
+    min-height: 180px;
+  }
+
+  .db-viewport .db-lime-edition-card {
+    height: auto;
+    min-height: 220px;
+    padding: 16px;
+    border-radius: 20px;
+    overflow: visible;
+  }
+
+  .db-viewport .db-lime-headline {
+    white-space: normal;
+  }
+
+  .db-viewport .db-lime-art-wrap {
+    min-height: 130px;
+    max-height: 190px;
+  }
+
+  /* Compact Studio Bottom Card on Mobile */
+  .db-viewport .db-studio-rect-art,
+  .db-viewport .db-studio-poster-art {
+    flex: 0 0 124px;
+    height: 124px;
+  }
+
+  .db-viewport .db-first-doc-guide {
+    padding: 22px 16px;
+    min-height: 200px;
+  }
+
+  .db-viewport .db-studio-rect-img {
+    object-fit: cover;
+  }
+
+  .db-viewport .db-panel-box {
+    padding: 18px 16px;
+    border-radius: 18px;
+    gap: 14px;
+  }
+
+  .db-viewport .db-analytics-toolbar,
+  .db-viewport .db-analytics-presets {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  /* Chat View Mobile Fit */
+  .db-viewport .db-chat-page {
+    height: auto;
+  }
+
+  .db-viewport .db-chat-card {
+    min-height: 380px;
+    max-height: calc(100dvh - 280px);
+    border-radius: 20px;
+  }
+
+  .db-viewport .db-chat-top-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 14px;
+  }
+
+  .db-viewport .db-chat-bubble {
+    max-width: 92%;
+  }
+
+  /* Tables & Touch Polish */
+  .db-viewport .db-crud-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .db-viewport .db-sql-preview {
+    max-width: 100%;
+  }
+
+  /* Collaborator Workspaces: Home Viz, Repository IDE & Analytics (< 1024px) */
+  .db-viewport .db-home-top-viz-grid,
+  .db-viewport .db-home-main-row,
+  .db-viewport .db-home-recent-and-actions,
+  .db-viewport .db-home-workflow-steps,
+  .db-viewport .db-ana-pillars-grid,
+  .db-viewport .db-ana-discovery,
+  .db-viewport .db-ana-charts-grid,
+  .db-viewport .db-ana-stances-grid {
+    grid-template-columns: 1fr;
+    height: auto;
+    gap: 12px;
+  }
+
+  .db-viewport .db-home-viz-card,
+  .db-viewport .db-home-primary-chart-card,
+  .db-viewport .db-ana-hero-card,
+  .db-viewport .db-ana-chat-panel,
+  .db-viewport .db-ana-matrix-card {
+    height: auto;
+    min-width: 0;
+  }
+
+  .db-viewport .db-home-honest-empty {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 12px;
+  }
+
+  .db-viewport .db-repo-ide {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+    gap: 12px;
+  }
+
+  .db-viewport .db-repo-explorer,
+  .db-viewport .db-ana-doc-selector {
+    width: 100%;
+    max-width: 100%;
+    max-height: 250px;
+    border-right: none;
+  }
+
+  .db-viewport .db-repo-editor {
+    width: 100%;
+    min-width: 0;
+    min-height: 360px;
+  }
+
+  .db-viewport .db-repo-tabbar,
+  .db-viewport .db-repo-subbar,
+  .db-viewport .db-ana-corpus-status,
+  .db-viewport .db-ana-hero-actions,
+  .db-viewport .db-ana-results-bar,
+  .db-viewport .db-ana-sources-list {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .db-viewport .db-repo-tabs-scroll {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .db-viewport .db-repo-metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .db-viewport .db-repo-sheet-scroll,
+  .db-viewport .db-repo-pdf-container {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .db-viewport .db-repo-pdf-iframe {
+    min-height: 340px;
+  }
+
+  /* Collaborator MainCanvas Standalone Search & Workspace Grid */
+  .db-viewport .db-greeting-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .db-viewport .db-standalone-search-wrap,
+  .db-viewport .db-standalone-search-box {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .db-viewport .db-search-popover {
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .db-viewport .db-workspace-grid {
+    grid-template-columns: 1fr;
+    height: auto;
+    gap: 12px;
+  }
+
+  .db-viewport .db-workspace-card,
+  .db-viewport .db-workspace-card--wide {
+    grid-column: auto;
+    height: auto;
+    min-width: 0;
+    padding: 14px;
+  }
+
+  .db-viewport .db-inline-form {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .db-viewport .db-inline-input {
+    min-width: 0;
+  }
+
+  .db-viewport [data-tooltip]::after {
+    display: none !important;
+  }
+}
+
+/* Tablet Floating Capsule Bottom Nav (640px - 1023px) */
+@media (min-width: 640px) and (max-width: 1023px) {
+  .db-viewport .db-mobile-bottom-nav {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: min(560px, calc(100% - 32px));
+  }
+}
+
+/* Compact Phone Screens (< 640px) */
+@media (max-width: 639px) {
+  /* Prevent iOS Safari auto-zoom on form focus */
+  .db-viewport .db-right-search-input,
+  .db-viewport .db-standalone-search-input,
+  .db-viewport .db-global-search-input,
+  .db-viewport .db-inline-input,
+  .db-viewport .db-chat-input,
+  .db-viewport .db-chat-scope-select,
+  .db-viewport .db-crud-input,
+  .db-viewport .db-dialog-input {
+    font-size: 16px;
+  }
+
+  .db-viewport .db-quick-btn {
+    height: 38px;
+    padding: 0 13px;
+    font-size: 12px;
+  }
+
+  /* Compact 2+1 KPI fallback if rendered */
+  .db-viewport .db-kpi-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .db-viewport .db-kpi-card {
+    padding: 15px 16px;
+  }
+
+  .db-viewport .db-kpi-value {
+    font-size: 24px;
+  }
+
+  .db-viewport .db-kpi-echarts-mini {
+    width: 62px;
+    height: 40px;
+  }
+
+  .db-viewport .db-kpi-card--dark {
+    grid-column: 1 / -1;
+  }
+
+  .db-viewport .db-kpi-card--dark .db-kpi-echarts-mini {
+    width: 120px;
+    height: 46px;
+  }
+
+  /* Shorten Bottom CRUD + AI Studio Area on Phones with clean spacing */
+  .db-viewport .db-crud-head-actions {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .db-viewport .db-crud-create-bar {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .db-viewport .db-crud-input,
+  .db-viewport .db-crud-input--sm {
+    flex: 1 1 130px;
+    min-width: 0;
+  }
+
+  .db-viewport .db-crud-table th:nth-child(2),
+  .db-viewport .db-crud-table td:nth-child(2),
+  .db-viewport .db-crud-table th:nth-child(3),
+  .db-viewport .db-crud-table td:nth-child(3) {
+    display: none;
+  }
+
+  .db-viewport .db-crud-table tbody tr:nth-child(n + 4) {
+    display: none;
+  }
+
+  .db-viewport .db-crud-table th,
+  .db-viewport .db-crud-table td {
+    padding: 10px 6px;
+  }
+
+  .db-viewport .db-crud-doc-title {
+    max-width: 140px;
+  }
+
+  .db-viewport .db-slot-rect .db-kpi-echarts-mini {
+    width: 82px;
+    height: 42px;
+  }
+
+  .db-viewport .db-crud-icon-btn {
+    width: 32px;
+    height: 32px;
+  }
+
+  .db-viewport .db-greeting-left {
+    gap: 12px 16px;
+  }
+
+  .db-viewport .db-inline-header-stats {
+    gap: 14px;
+  }
+
+  .db-viewport .db-studio-rect-art,
+  .db-viewport .db-studio-poster-art {
+    display: none;
+  }
+
+  .db-viewport .db-rect-cta-primary,
+  .db-viewport .db-rect-cta-secondary {
+    height: 38px;
+  }
+
+  .db-viewport .db-chat-card {
+    min-height: 340px;
+    max-height: 62dvh;
+  }
+
+  .db-viewport .db-chat-send-btn {
+    width: 42px;
+    height: 42px;
+  }
+
+  .db-viewport .db-quiz-opts {
+    grid-template-columns: 1fr;
+  }
+
+  .db-viewport .db-asset-empty-card {
+    flex-direction: column;
+    text-align: center;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .db-viewport .db-asset-empty-copy {
+    align-items: center;
+  }
+
+  .db-viewport .db-repo-search-input {
+    font-size: 16px;
+  }
+
+  .db-viewport .db-repo-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Narrow Phone Screens (< 375px) */
+@media (max-width: 374px) {
+  .db-viewport .db-kpi-row {
+    grid-template-columns: 1fr;
+  }
+
+  .db-viewport .db-kpi-echarts-mini {
+    width: 96px;
+    height: 44px;
+  }
+
+  .db-viewport .db-mobile-nav-btn {
+    padding: 5px 2px;
+  }
+
+  .db-viewport .db-mobile-nav-label {
+    font-size: 9px;
+  }
+}

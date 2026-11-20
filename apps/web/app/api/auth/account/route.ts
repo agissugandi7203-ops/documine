@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  ACCESS_COOKIE,
-  REFRESH_COOKIE,
   clearAuthCookies,
-  supabaseGetUser,
-  supabaseRefreshSession,
+  resolveServerSession,
+  setAuthCookies,
 } from "@/lib/server/supabase-auth";
 import {
   checkRateLimit,
@@ -34,35 +32,24 @@ export async function DELETE(req: NextRequest) {
     );
   }
 
-  let accessToken = req.cookies.get(ACCESS_COOKIE)?.value;
-  const refreshToken = req.cookies.get(REFRESH_COOKIE)?.value;
+  const session = await resolveServerSession(req, {
+    verifyAccessWithProvider: true,
+  });
 
-  if (accessToken) {
-    const check = await supabaseGetUser(accessToken);
-    if (!check.ok) {
-      accessToken = undefined;
-    }
-  }
-
-  if (!accessToken && refreshToken) {
-    const refreshed = await supabaseRefreshSession(refreshToken);
-    if (refreshed.ok && refreshed.data?.access_token) {
-      accessToken = refreshed.data.access_token;
-    }
-  }
-
-  if (!accessToken) {
-    return NextResponse.json(
+  if (!session.authenticated || !session.accessToken) {
+    const expired = NextResponse.json(
       { detail: "Authentication required." },
       { status: 401 }
     );
+    clearAuthCookies(expired, req);
+    return expired;
   }
 
   try {
     const upstream = await fetch(`${FASTAPI_URL}/api/auth/account`, {
       method: "DELETE",
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${session.accessToken}`,
       },
       cache: "no-store",
     });
@@ -74,6 +61,10 @@ export async function DELETE(req: NextRequest) {
     const res = NextResponse.json(payload, { status: upstream.status });
     if (upstream.ok) {
       clearAuthCookies(res, req);
+    } else if (session.refreshedSession) {
+      await setAuthCookies(res, session.refreshedSession, req, {
+        existingSessionExpEpoch: session.sessionExpEpoch,
+      });
     }
     return res;
   } catch {

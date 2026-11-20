@@ -1,8 +1,13 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Signal — Forgot Password",
-  description: "Request a password reset link for your Signal account.",
+  title: "Forgot Password",
+  description: "Request a password reset link for your DocuMind account.",
+  openGraph: {
+    title: "Forgot Password | DocuMind",
+    description: "Request a password reset link for your DocuMind account.",
+    images: ["/opengraph-image"],
+  },
 };
 
 export default function ForgotPasswordLayout({

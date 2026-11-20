@@ -1,18 +1,16 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Loader2, Search, X } from "lucide-react";
+import { ChevronDown, ChevronUp, PanelRightClose } from "lucide-react";
 import { PreviewItem } from "./PreviewItem";
 import type { PreviewLayerItem } from "./types";
 
 interface PreviewPanelProps {
   items: PreviewLayerItem[];
   selectedIndex: number;
-  searchQuery: string;
-  searchLoading: boolean;
-  searchResultCount: number | null;
-  onSearchChange: (q: string) => void;
-  onSearchClear: () => void;
+  minimized: boolean;
+  onToggleMinimize: () => void;
+  onCollapseRail: () => void;
   onSelectPreview: (index: number) => void;
   onReorderPreviews: (fromIndex: number, toIndex: number) => void;
   onDropPreviewToCanvas?: (index: number) => void;
@@ -30,27 +28,26 @@ interface CardDragState {
 }
 
 /**
- * Top-right section with integrated workspace Search bar and 3 physical
- * playing-card style preview items that smoothly switch positions when dragged.
+ * Top-right preview card stack section (Quick Stage · 03)
+ * Decoupled from global Search bar so Search can appear across every dashboard view.
  */
 export function PreviewPanel({
   items,
   selectedIndex,
-  searchQuery,
-  searchLoading,
-  searchResultCount,
-  onSearchChange,
-  onSearchClear,
+  minimized,
+  onToggleMinimize,
+  onCollapseRail,
   onSelectPreview,
   onReorderPreviews,
   onDropPreviewToCanvas,
 }: PreviewPanelProps) {
   const stackRef = useRef<HTMLDivElement>(null);
-  const [stackHeight, setStackHeight] = useState(260);
+  const [stackHeight, setStackHeight] = useState(230);
   const [dragState, setDragState] = useState<CardDragState | null>(null);
   const dragRef = useRef<CardDragState | null>(null);
 
   useEffect(() => {
+    if (minimized) return;
     const el = stackRef.current;
     if (!el) return;
 
@@ -63,11 +60,11 @@ export function PreviewPanel({
     const observer = new ResizeObserver(updateSize);
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [minimized]);
 
-  const cardHeight = Math.max(66, Math.round(stackHeight * 0.44));
+  const cardHeight = Math.max(84, Math.round(stackHeight * 0.54));
   const slotCount = Math.max(1, items.length - 1);
-  const slotStep = Math.max(24, (stackHeight - cardHeight) / slotCount);
+  const slotStep = Math.max(28, (stackHeight - cardHeight) / slotCount);
 
   const handlePointerDown = (
     e: React.PointerEvent<HTMLDivElement>,
@@ -148,61 +145,64 @@ export function PreviewPanel({
   };
 
   return (
-    <section className="db-preview-section" aria-label="Search and Preview Stack">
-      <div className="db-right-search-pill">
-        <Search className="db-right-search-icon" strokeWidth={2.2} aria-hidden="true" />
-        <input
-          type="search"
-          className="db-right-search-input"
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Search documents..."
-          aria-label="Search workspace documents and chunks"
-        />
-        {searchLoading ? (
-          <Loader2 className="db-right-search-spinner db-spin" aria-hidden="true" />
-        ) : searchQuery.trim() ? (
+    <section
+      className={`db-preview-section ${
+        minimized ? "db-preview-section--minimized" : ""
+      }`}
+      aria-label="Quick Stage Preview Stack"
+    >
+      <div className="db-section-subbar">
+        <span className="db-section-sublabel">Quick Stage · 03</span>
+        <div className="db-subbar-actions">
           <button
             type="button"
-            className="db-right-search-clear"
-            aria-label="Clear search"
-            onClick={onSearchClear}
+            className="db-inline-collapse-btn"
+            aria-label={minimized ? "Expand quick cards" : "Minimize quick cards"}
+            onClick={onToggleMinimize}
           >
-            <X size={12} />
+            {minimized ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
           </button>
-        ) : null}
-        {searchResultCount !== null && searchQuery.trim() && !searchLoading && (
-          <span className="db-right-search-count">{searchResultCount}</span>
-        )}
+          <button
+            type="button"
+            className="db-inline-collapse-btn"
+            aria-label="Minimize right rail"
+            data-tooltip="Collapse Rail"
+            onClick={onCollapseRail}
+          >
+            <PanelRightClose size={13} />
+          </button>
+        </div>
       </div>
 
-      <div className="db-preview-stack" ref={stackRef}>
-        {items.map((item, index) => {
-          const isDragging = dragState?.id === item.id;
-          const topPx = isDragging
-            ? dragState.startSlot * slotStep
-            : index * slotStep;
+      {!minimized && (
+        <div className="db-preview-stack" ref={stackRef}>
+          {items.map((item, index) => {
+            const isDragging = dragState?.id === item.id;
+            const topPx = isDragging
+              ? dragState.startSlot * slotStep
+              : index * slotStep;
 
-          return (
-            <PreviewItem
-              key={item.id}
-              item={item}
-              index={index}
-              selected={selectedIndex === index}
-              isDragging={isDragging}
-              cardHeight={cardHeight}
-              topPx={topPx}
-              dragDx={isDragging ? dragState.dx : 0}
-              dragDy={isDragging ? dragState.dy : 0}
-              onPointerDown={(e) => handlePointerDown(e, item, index)}
-              onPointerMove={(e) => handlePointerMove(e, item.id)}
-              onPointerUp={(e) => handlePointerFinish(e, item.id)}
-              onPointerCancel={(e) => handlePointerFinish(e, item.id)}
-              onKeySelect={() => onSelectPreview(index)}
-            />
-          );
-        })}
-      </div>
+            return (
+              <PreviewItem
+                key={item.id}
+                item={item}
+                index={index}
+                selected={selectedIndex === index}
+                isDragging={isDragging}
+                cardHeight={cardHeight}
+                topPx={topPx}
+                dragDx={isDragging ? dragState.dx : 0}
+                dragDy={isDragging ? dragState.dy : 0}
+                onPointerDown={(e) => handlePointerDown(e, item, index)}
+                onPointerMove={(e) => handlePointerMove(e, item.id)}
+                onPointerUp={(e) => handlePointerFinish(e, item.id)}
+                onPointerCancel={(e) => handlePointerFinish(e, item.id)}
+                onKeySelect={() => onSelectPreview(index)}
+              />
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }

@@ -22,6 +22,9 @@
   --trust-bg: #28282a;
   --trust-border: rgba(255, 255, 255, 0.4);
   --trust-text: #c4c2c3;
+  --font-inter: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-jakarta: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   --font-sans: var(--font-inter), "Inter", "Segoe UI", system-ui, sans-serif;
   --font-display: "BubbledotICG-FinePos", "Geist Pixel Circle", monospace;
   --trust-size: clamp(36px, 4.5vw, 42px);
@@ -58,6 +61,35 @@ html, body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(140, 140, 148, 0.38) transparent;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb {
+  background: rgba(140, 140, 148, 0.38);
+  border-radius: 999px;
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover {
+  background: rgba(160, 160, 168, 0.62);
+}
+
+html::-webkit-scrollbar-button,
+body::-webkit-scrollbar-button {
+  display: none;
 }
 
 a {
@@ -476,7 +508,7 @@ a {
 .headline .line:nth-child(2) { animation-delay: 0.3s; }
 
 .subhead {
-  max-width: min(500px, 92%);
+  max-width: min(760px, 92%);
   font-family: var(--font-sans);
   font-size: clamp(calc(13.5px + 2pt), calc(1.55vw + 2pt), calc(16.5px + 2pt));
   color: #d0d0d0;
@@ -565,32 +597,30 @@ a {
   line-height: 1.2;
 }
 
-/* Animations for Section 1 */
+/* Animations for Section 1 (compositor-only transforms + opacity for zero paint jank) */
 .anim {
   opacity: 0;
-  transform: translateY(22px) scale(0.98);
-  filter: blur(6px);
-  animation: reveal 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  transform: translate3d(0, 18px, 0) scale(0.985);
+  animation: reveal 0.72s cubic-bezier(0.22, 1, 0.36, 1) forwards;
   animation-delay: var(--d, 0s);
 }
 
 .anim-pulse {
   opacity: 0;
-  transform: translateY(22px) scale(0.96);
-  filter: blur(6px);
-  animation: revealPulse 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  animation-delay: var(--d, 0.4s);
+  transform: translate3d(0, 18px, 0) scale(0.97);
+  animation: revealPulse 0.76s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: var(--d, 0.35s);
 }
 
 @keyframes reveal {
-  0% { opacity: 0; transform: translateY(22px) scale(0.98); filter: blur(6px); }
-  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  0% { opacity: 0; transform: translate3d(0, 18px, 0) scale(0.985); }
+  100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
 }
 
 @keyframes revealPulse {
-  0% { opacity: 0; transform: translateY(22px) scale(0.96); filter: blur(6px); }
-  70% { transform: translateY(-2px) scale(1.02); filter: blur(0); }
-  100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  0% { opacity: 0; transform: translate3d(0, 18px, 0) scale(0.97); }
+  70% { transform: translate3d(0, -2px, 0) scale(1.015); }
+  100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
 }
 
 @keyframes headlineFade {
@@ -755,6 +785,7 @@ a {
   height: 100%;
   object-fit: fill;
   pointer-events: none;
+  transform: translateZ(0);
 }
 
 .card__grain {
@@ -877,13 +908,11 @@ a {
   border: none;
   border-radius: calc(10 * var(--u));
   background:
-    linear-gradient(0deg, rgba(255,255,255,.30) 0%, rgba(255,255,255,.15) 45%, rgba(255,255,255,0) 80%),
+    linear-gradient(0deg, rgba(255,255,255,.34) 0%, rgba(255,255,255,.18) 45%, rgba(255,255,255,0) 80%),
     linear-gradient(270deg, rgba(213,62,152,.62) 0px, rgba(213,62,152,0) calc(5 * var(--u))),
-    radial-gradient(ellipse 118% 70% at 60% 8%, rgba(255,203,252,.34), transparent 74%),
-    linear-gradient(105deg, rgba(250,232,250,.72) 0%, rgba(238,120,214,.68) 51%, rgba(222,86,177,.82) 100%);
+    radial-gradient(ellipse 118% 70% at 60% 8%, rgba(255,203,252,.38), transparent 74%),
+    linear-gradient(105deg, rgba(250,232,250,.82) 0%, rgba(238,120,214,.78) 51%, rgba(222,86,177,.88) 100%);
   box-shadow: 0 calc(13 * var(--u)) calc(25 * var(--u)) rgba(70,17,69,.31), inset 0 1px 0 rgba(255,255,255,.12);
-  backdrop-filter: blur(calc(9 * var(--u))) saturate(1.08);
-  -webkit-backdrop-filter: blur(calc(9 * var(--u))) saturate(1.08);
 }
 
 .window-lines {
@@ -1580,6 +1609,94 @@ a {
   .sc-brand-col, .sc-newsletter-col { grid-column: 1 / -1; }
   .sc-hand--left { left: -80px; top: 25%; }
   .sc-hand--right { right: -80px; top: 25%; }
+}
+
+/* Compositor layer isolation & below-the-fold lazy skeleton styles */
+.hero-video,
+.vexor-video,
+.gauge,
+.context-backdrop {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+.stage,
+.vexor-section,
+.falcon-footer {
+  contain: layout paint;
+}
+
+.vexor-direct-links {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px 18px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.vexor-direct-link {
+  color: #ffffff;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+  text-underline-offset: 4px;
+  transition: opacity 0.16s ease, text-decoration-color 0.16s ease;
+}
+
+.vexor-direct-link:hover {
+  opacity: 0.9;
+  text-decoration-color: #ffffff;
+}
+
+.fm-section--skeleton {
+  padding: clamp(64px, 8.5vh, 108px) clamp(16px, 3.6vw, 54px) clamp(84px, 11vh, 136px);
+  background: #ececeb;
+}
+
+.fm-skel-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fm-skel-line {
+  display: block;
+  border-radius: 10px;
+  background: #dfdfdc;
+  animation: fmSkelPulse 1.4s ease-in-out infinite;
+}
+
+.fm-skel-line--title {
+  width: min(360px, 80%);
+  height: 36px;
+}
+
+.fm-skel-line--sub {
+  width: min(260px, 60%);
+  height: 32px;
+}
+
+.fm-skel-line--copy {
+  width: 100%;
+  height: 18px;
+}
+
+.fm-skel-line--copyShort {
+  width: 72%;
+  height: 18px;
+}
+
+.fm-skel-card {
+  border-radius: 22px;
+  background: #e2e2de;
+  animation: fmSkelPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes fmSkelPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {

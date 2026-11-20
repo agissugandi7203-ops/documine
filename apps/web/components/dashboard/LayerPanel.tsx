@@ -1,12 +1,19 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { ArrowLeftRight, GripHorizontal } from "lucide-react";
+import {
+  ArrowLeftRight,
+  ChevronDown,
+  ChevronUp,
+  GripHorizontal,
+} from "lucide-react";
 import type { DeckLayerItem } from "./types";
 
 interface LayerPanelProps {
   layers: DeckLayerItem[];
   selectedLayerIndex: number;
+  minimized: boolean;
+  onToggleMinimize: () => void;
   onSelectLayer: (index: number) => void;
   onReorderLayers: (fromIndex: number, toIndex: number) => void;
   onCycleLayer: () => void;
@@ -27,24 +34,27 @@ function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
 }
 
-function getSlotPose(slotIndex: number, fanWidth: number) {
-  const stepX = fanWidth * 0.145;
+function getSlotPose(slotIndex: number, fanWidth: number, cardWidth: number) {
+  const startX = 4;
+  const maxTravel = Math.max(24, fanWidth - cardWidth - 10);
   if (slotIndex === 0) {
-    return { x: fanWidth * 0.05, y: 12, rotate: -18 };
+    return { x: startX, y: 8, rotate: -10 };
   }
   if (slotIndex === 1) {
-    return { x: fanWidth * 0.05 + stepX, y: 5, rotate: -9 };
+    return { x: startX + maxTravel * 0.5, y: 3, rotate: -4 };
   }
-  return { x: fanWidth * 0.05 + stepX * 2, y: 0, rotate: -2 };
+  return { x: startX + maxTravel, y: 0, rotate: 1 };
 }
 
 /**
- * Bottom-right fanned playing-card deck supporting live pointer drag and
- * card-switching animations without browser drag blur.
+ * Bottom-right fanned playing-card deck featuring custom risograph illustrations,
+ * live pointer drag-and-swap, and collapsible state.
  */
 export function LayerPanel({
   layers,
   selectedLayerIndex,
+  minimized,
+  onToggleMinimize,
   onSelectLayer,
   onReorderLayers,
   onCycleLayer,
@@ -55,6 +65,7 @@ export function LayerPanel({
   const dragRef = useRef<FanDragState | null>(null);
 
   useEffect(() => {
+    if (minimized) return;
     const el = fanRef.current;
     if (!el) return;
 
@@ -69,11 +80,11 @@ export function LayerPanel({
     const observer = new ResizeObserver(updateSize);
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [minimized]);
 
   const activeLayer = layers[selectedLayerIndex] ?? layers[layers.length - 1];
-  const cardWidth = Math.max(105, Math.round(fanSize.w * 0.6));
-  const cardHeight = Math.max(96, Math.round(fanSize.h * 1.04));
+  const cardWidth = Math.max(114, Math.round(fanSize.w * 0.54));
+  const cardHeight = Math.max(118, Math.round(fanSize.h - 10));
 
   const handlePointerDown = (
     e: React.PointerEvent<HTMLDivElement>,
@@ -110,9 +121,11 @@ export function LayerPanel({
 
     let nextSlot = cur.currentSlot;
     if (moved) {
-      const startPose = getSlotPose(cur.startSlot, fanSize.w);
+      const startPose = getSlotPose(cur.startSlot, fanSize.w, cardWidth);
       const visualX = startPose.x + dx;
-      const poses = [0, 1, 2].map((i) => getSlotPose(i, fanSize.w).x);
+      const poses = [0, 1, 2].map(
+        (i) => getSlotPose(i, fanSize.w, cardWidth).x
+      );
 
       let closestSlot = cur.currentSlot;
       let bestDist = Infinity;
@@ -161,92 +174,134 @@ export function LayerPanel({
   };
 
   return (
-    <section className="db-layer-panel" aria-label="Layer Deck">
+    <section
+      className={`db-layer-panel ${
+        minimized ? "db-layer-panel--minimized" : ""
+      }`}
+      aria-label="Layer Deck"
+    >
       <div className="db-layer-header">
-        <div className="db-layer-header-pill" title="Drag playing cards to switch order">
+        <div
+          className="db-layer-header-pill"
+          title="Drag playing cards to switch order"
+        >
           <span className="db-layer-pill-dot" aria-hidden="true" />
           <span className="db-layer-pill-text">
-            {activeLayer ? activeLayer.label : "Layer Deck"}
+            {activeLayer ? activeLayer.label : "Deck"}
           </span>
         </div>
 
-        <button
-          type="button"
-          className="db-layer-circle-btn"
-          aria-label="Cycle layer card"
-          data-tooltip="Switch Deck"
-          onClick={onCycleLayer}
-        >
-          <ArrowLeftRight className="db-layer-circle-icon" strokeWidth={2} />
-        </button>
+        <div className="db-layer-header-actions">
+          <button
+            type="button"
+            className="db-layer-circle-btn"
+            aria-label="Cycle layer card"
+            data-tooltip="Switch Card"
+            onClick={onCycleLayer}
+          >
+            <ArrowLeftRight className="db-layer-circle-icon" strokeWidth={2} />
+          </button>
+
+          <button
+            type="button"
+            className="db-inline-collapse-btn"
+            aria-label={minimized ? "Expand deck" : "Minimize deck"}
+            onClick={onToggleMinimize}
+          >
+            {minimized ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+          </button>
+        </div>
       </div>
 
-      <div className="db-layer-fan" ref={fanRef}>
-        {layers.map((layer, index) => {
-          const selected = selectedLayerIndex === index;
-          const isDragging = dragState?.id === layer.id;
-          const restPose = getSlotPose(index, fanSize.w);
-          const dragStartPose = isDragging
-            ? getSlotPose(dragState.startSlot, fanSize.w)
-            : restPose;
+      {!minimized && (
+        <div className="db-layer-fan" ref={fanRef}>
+          {layers.map((layer, index) => {
+            const selected = selectedLayerIndex === index;
+            const isDragging = dragState?.id === layer.id;
+            const restPose = getSlotPose(index, fanSize.w, cardWidth);
+            const dragStartPose = isDragging
+              ? getSlotPose(dragState.startSlot, fanSize.w, cardWidth)
+              : restPose;
 
-          const x = isDragging ? dragStartPose.x + dragState.dx : restPose.x;
-          const y = isDragging ? dragStartPose.y + dragState.dy : restPose.y;
-          const rot = isDragging
-            ? dragStartPose.rotate * 0.35 + clamp(dragState.dx * 0.08, -6, 6)
-            : restPose.rotate;
+            const x = isDragging ? dragStartPose.x + dragState.dx : restPose.x;
+            const y = isDragging ? dragStartPose.y + dragState.dy : restPose.y;
+            const rot = isDragging
+              ? dragStartPose.rotate * 0.35 + clamp(dragState.dx * 0.08, -6, 6)
+              : restPose.rotate;
 
-          const toneClass =
-            layer.tone === "light"
-              ? "db-layer-card--light"
-              : layer.tone === "mid"
-              ? "db-layer-card--mid"
-              : "db-layer-card--dark";
+            const toneClass =
+              layer.tone === "light"
+                ? "db-layer-card--light"
+                : layer.tone === "mid"
+                ? "db-layer-card--mid"
+                : "db-layer-card--dark";
 
-          return (
-            <div
-              key={layer.id}
-              role="button"
-              tabIndex={0}
-              className={`db-layer-card ${toneClass} ${
-                selected ? "db-layer-card--selected" : ""
-              } ${isDragging ? "db-layer-card--dragging" : ""}`}
-              style={{
-                width: `${cardWidth}px`,
-                height: `${cardHeight}px`,
-                left: 0,
-                bottom: "-12px",
-                zIndex: isDragging ? 45 : index + 1,
-                transform: `translate3d(${x}px, ${y}px, 0) rotate(${rot}deg) scale(${
-                  isDragging ? 1.04 : 1
-                })`,
-                transition: isDragging
-                  ? "box-shadow 140ms ease, border-color 140ms ease"
-                  : "transform 250ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms ease, border-color 180ms ease",
-              }}
-              aria-label={`${layer.label}. Drag to switch position`}
-              aria-pressed={selected}
-              onPointerDown={(e) => handlePointerDown(e, layer, index)}
-              onPointerMove={(e) => handlePointerMove(e, layer.id)}
-              onPointerUp={(e) => handlePointerFinish(e, layer.id)}
-              onPointerCancel={(e) => handlePointerFinish(e, layer.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onSelectLayer(index);
-                }
-              }}
-            >
-              <div className="db-layer-card-top">
-                <span className="db-layer-card-code">{layer.code}</span>
-                <GripHorizontal className="db-layer-card-grip" strokeWidth={2} />
+            return (
+              <div
+                key={layer.id}
+                role="button"
+                tabIndex={0}
+                className={`db-layer-card ${toneClass} ${
+                  selected ? "db-layer-card--selected" : ""
+                } ${isDragging ? "db-layer-card--dragging" : ""}`}
+                style={{
+                  width: `${cardWidth}px`,
+                  height: `${cardHeight}px`,
+                  left: 0,
+                  bottom: "4px",
+                  zIndex: isDragging ? 45 : index + 1,
+                  transform: `translate3d(${x}px, ${y}px, 0) rotate(${rot}deg) scale(${
+                    isDragging ? 1.04 : 1
+                  })`,
+                  transition: isDragging
+                    ? "box-shadow 140ms ease, border-color 140ms ease"
+                    : "transform 250ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms ease, border-color 180ms ease",
+                }}
+                aria-label={`${layer.label}. Drag to switch position`}
+                aria-pressed={selected}
+                onPointerDown={(e) => handlePointerDown(e, layer, index)}
+                onPointerMove={(e) => handlePointerMove(e, layer.id)}
+                onPointerUp={(e) => handlePointerFinish(e, layer.id)}
+                onPointerCancel={(e) => handlePointerFinish(e, layer.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSelectLayer(index);
+                  }
+                }}
+              >
+                <img
+                  src={layer.imageSrc}
+                  alt={layer.label}
+                  draggable={false}
+                  className="db-layer-card-art"
+                />
+                <span className="db-layer-card-scrim" aria-hidden="true" />
+                <div className="db-layer-card-top">
+                  <span className="db-layer-card-code">{layer.code}</span>
+                  <GripHorizontal
+                    className="db-layer-card-grip"
+                    strokeWidth={2}
+                  />
+                </div>
+                <div className="db-layer-card-bottom">
+                  <div className="db-layer-card-stat">
+                    {layer.metric || layer.shortLabel}
+                  </div>
+                  <div className="db-layer-card-foot">
+                    <span className="db-layer-card-label">{layer.label}</span>
+                    {layer.detail && (
+                      <span className="db-layer-card-detail">
+                        {layer.detail}
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="db-layer-card-label">{layer.label}</div>
-              <div className="db-layer-card-tag">{layer.shortLabel}</div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }

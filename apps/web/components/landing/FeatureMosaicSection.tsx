@@ -41,11 +41,8 @@ export function FeatureMosaicSection() {
       return;
     }
 
-    setMotionPhase("pending");
-
     let cancelled = false;
     let raf1 = 0;
-    let raf2 = 0;
     let runTimer: number | undefined;
     let failSafeTimer: number | undefined;
 
@@ -56,26 +53,12 @@ export function FeatureMosaicSection() {
       if (runTimer !== undefined) window.clearTimeout(runTimer);
     };
 
-    const startChoreography = async () => {
-      failSafeTimer = window.setTimeout(finish, 2400);
-
-      const fontWait =
-        typeof document !== "undefined" && document.fonts?.ready
-          ? Promise.race([
-              document.fonts.ready.catch(() => undefined),
-              new Promise<void>((resolve) => window.setTimeout(resolve, 700)),
-            ])
-          : Promise.resolve();
-
-      await fontWait;
-      if (cancelled) return;
-
+    const startChoreography = () => {
+      failSafeTimer = window.setTimeout(finish, 1800);
       raf1 = window.requestAnimationFrame(() => {
-        raf2 = window.requestAnimationFrame(() => {
-          if (cancelled) return;
-          setMotionPhase("run");
-          runTimer = window.setTimeout(finish, 1850);
-        });
+        if (cancelled) return;
+        setMotionPhase("run");
+        runTimer = window.setTimeout(finish, 1450);
       });
     };
 
@@ -86,9 +69,9 @@ export function FeatureMosaicSection() {
         if (!visible) return;
         hasPlayedRef.current = true;
         observer.disconnect();
-        void startChoreography();
+        startChoreography();
       },
-      { threshold: 0.12 }
+      { rootMargin: "140px 0px", threshold: 0.04 }
     );
 
     observer.observe(el);
@@ -97,7 +80,6 @@ export function FeatureMosaicSection() {
       cancelled = true;
       observer.disconnect();
       if (raf1) window.cancelAnimationFrame(raf1);
-      if (raf2) window.cancelAnimationFrame(raf2);
       if (failSafeTimer !== undefined) window.clearTimeout(failSafeTimer);
       if (runTimer !== undefined) window.clearTimeout(runTimer);
     };
@@ -122,20 +104,19 @@ export function FeatureMosaicSection() {
         <h2 className="fm-section-headline">
           <span className="fm-section-headline__line">Everything You Need</span>
           <span className="fm-section-headline__line">
-            to <span className="fm-section-headline__accent">Automate</span> Work
+            to <span className="fm-section-headline__accent">Analyze</span> Docs
           </span>
         </h2>
         <p className="fm-section-intro">
-          Connect your favorite tools, run AI-powered workflows automatically,
-          track hours saved each week, and find anything across your workspace
-          in seconds.
+          Organize file repositories, trace semantic links across your knowledge
+          graph, query spreadsheets with SQL, and surface cited answers in seconds.
         </p>
       </header>
 
       <div className="fm-frame">
         <div className="fm-stage" role="region" aria-label="Product feature overview">
         {/* CARD 1: NOTIFICATION */}
-        <article className="fm-card fm-notif" aria-label="Automation notification">
+        <article className="fm-card fm-notif" aria-label="Indexing notification">
           <div className="fm-toast-wrap">
             <div className="fm-toast-ledge" aria-hidden="true" />
             <div className="fm-toast">
@@ -144,31 +125,20 @@ export function FeatureMosaicSection() {
                 viewBox="0 0 24 24"
                 aria-hidden="true"
               >
-                <defs>
-                  <mask id="fm-toast-sparkle-mask">
-                    <rect width="24" height="24" fill="#ffffff" />
-                    <path
-                      d="M12 2.2C12.7 7.6 16.4 11.3 21.8 12C16.4 12.7 12.7 16.4 12 21.8C11.3 16.4 7.6 12.7 2.2 12C7.6 11.3 11.3 7.6 12 2.2Z"
-                      fill="#000000"
-                    />
-                  </mask>
-                </defs>
-                <circle
-                  cx="12"
-                  cy="12"
-                  r="12"
-                  fill="#0d0d0d"
-                  mask="url(#fm-toast-sparkle-mask)"
-                />
+                <circle cx="12" cy="12" r="12" fill="#0d0d0d" />
                 <path
-                  d="M12 6.8C12.45 9.85 14.15 11.55 17.2 12C14.15 12.45 12.45 14.15 12 17.2C11.55 14.15 9.85 12.45 6.8 12C9.85 11.55 11.55 9.85 12 6.8Z"
-                  fill="#0d0d0d"
+                  d="M7.8 12.2L10.7 15.1L16.4 9.2"
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth="2.1"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
               </svg>
               <div className="fm-toast-copy">
-                <p className="fm-toast-title">Automation completed!</p>
+                <p className="fm-toast-title">Indexing completed!</p>
                 <p className="fm-toast-sub">
-                  Weekly client report sent automatically
+                  Q4 filings indexed with verified citations
                 </p>
               </div>
               <span className="fm-toast-time">2:34 PM</span>
@@ -176,14 +146,14 @@ export function FeatureMosaicSection() {
           </div>
         </article>
 
-        {/* CARD 2: CONNECT YOUR TOOLS */}
+        {/* CARD 2: CONNECT YOUR SOURCES */}
         <article className="fm-card fm-connect" aria-label="Integrations">
           <h2>
             Connect your
             <br />
-            Tools Now.
+            Sources Now.
           </h2>
-          <p className="fm-sub">120+ integrations available</p>
+          <p className="fm-sub">Sync docs across 120+ repositories</p>
 
           <div className="fm-chips">
             <div className="fm-chip-row r1">
@@ -361,15 +331,15 @@ export function FeatureMosaicSection() {
         </article>
 
         {/* CARD 3: AUTOMATE YOUR WORK (HERO CENTER) */}
-        <article className="fm-card fm-automate" aria-label="Automate your work">
+        <article className="fm-card fm-automate" aria-label="Understand your documents">
           <div className="fm-automate-copy">
             <h2>
-              <span className="g">Automate</span> your work.
+              <span className="g">Understand</span> your docs.
               <br />
-              Focus on what matters.
+              Focus on decisions.
             </h2>
             <p className="fm-sub">
-              AI-powered workflows that save teams hours every week.
+              Grounded AI synthesis across PDFs, CSVs, and knowledge graphs.
             </p>
           </div>
 
@@ -409,25 +379,29 @@ export function FeatureMosaicSection() {
                   />
                 </svg>
               </span>
-              <span>Workflow Automated</span>
+              <span>Citations Verified</span>
             </div>
 
             <div className="fm-pill-ai">
               <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M6.2 3.2C6.55 5.15 7.45 6.05 9.4 6.4C7.45 6.75 6.55 7.65 6.2 9.6C5.85 7.65 4.95 6.75 3 6.4C4.95 6.05 5.85 5.15 6.2 3.2Z"
+                <rect
+                  x="4"
+                  y="3.5"
+                  width="13"
+                  height="16.5"
+                  rx="2.6"
                   fill="#eff4e6"
                   stroke="#4f7433"
-                  strokeWidth="2.2"
-                  strokeLinejoin="round"
+                  strokeWidth="2"
                 />
                 <path
-                  d="M14.8 5.2C15.5 9.6 17.6 11.7 22 12.4C17.6 13.1 15.5 15.2 14.8 19.6C14.1 15.2 12 13.1 7.6 12.4C12 11.7 14.1 9.6 14.8 5.2Z"
-                  fill="#eff4e6"
+                  d="M7.5 8.5H13.5M7.5 12H12M7.5 15.5H10.5"
+                  fill="none"
                   stroke="#4f7433"
-                  strokeWidth="2.25"
-                  strokeLinejoin="round"
+                  strokeWidth="1.9"
+                  strokeLinecap="round"
                 />
+                <circle cx="17.5" cy="17.5" r="3.2" fill="#eff4e6" stroke="#4f7433" strokeWidth="2" />
               </svg>
               <div className="fm-skel-lines">
                 <div className="fm-skel-line" />
@@ -456,7 +430,7 @@ export function FeatureMosaicSection() {
           className="fm-card fm-insights"
           aria-label="Productivity insights"
         >
-          <span className="fm-tag">Productivity Insights</span>
+          <span className="fm-tag">Research Velocity</span>
           <h2>48 hours</h2>
           <p className="fm-sub">saved this week!</p>
 
@@ -510,7 +484,7 @@ export function FeatureMosaicSection() {
               </svg>
             </span>
             <span className="fm-search-ph">
-              Search tasks, docs, workflows...
+              Search files, topics, citations...
             </span>
             <svg
               className="fm-mic"

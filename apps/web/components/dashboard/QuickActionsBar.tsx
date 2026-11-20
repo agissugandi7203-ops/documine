@@ -1,67 +1,50 @@
 "use client";
 
 import React from "react";
-import {
-  BarChart3,
-  GitCompare,
-  GraduationCap,
-  Plus,
-} from "lucide-react";
-import type { DashboardSectionId } from "./types";
+import { FolderOpen, MessageSquare, Plus } from "lucide-react";
 
 interface QuickActionsBarProps {
-  activeNavId: DashboardSectionId;
   uploading: boolean;
   onTriggerUpload: () => void;
-  onNavigate: (section: DashboardSectionId) => void;
+  onOpenSynthesis: () => void;
+  onOpenStudio: () => void;
 }
 
 /**
- * Editorial pill quick-actions cluster inspired by clean modern workspace headers.
+ * Clean header action pills: AI Chat, Repository, and Upload PDF CTA.
  */
 export function QuickActionsBar({
-  activeNavId,
   uploading,
   onTriggerUpload,
-  onNavigate,
+  onOpenSynthesis,
+  onOpenStudio,
 }: QuickActionsBarProps) {
   return (
     <div
       className="db-quick-actions-bar"
       role="group"
-      aria-label="Quick Actions"
+      aria-label="Workspace Actions"
     >
       <button
         type="button"
-        className={`db-quick-btn ${
-          activeNavId === "analytics" ? "db-quick-btn--selected" : ""
-        }`}
-        onClick={() => onNavigate("analytics")}
+        className="db-quick-btn"
+        onClick={onOpenSynthesis}
       >
-        <BarChart3 className="db-quick-btn-icon" strokeWidth={2} aria-hidden="true" />
-        <span>Analytics</span>
+        <MessageSquare
+          className="db-quick-btn-icon"
+          strokeWidth={2}
+          aria-hidden="true"
+        />
+        <span>AI Chat</span>
       </button>
 
-      <button
-        type="button"
-        className={`db-quick-btn ${
-          activeNavId === "synthesis" ? "db-quick-btn--selected" : ""
-        }`}
-        onClick={() => onNavigate("synthesis")}
-      >
-        <GitCompare className="db-quick-btn-icon" strokeWidth={2} aria-hidden="true" />
-        <span>Compare</span>
-      </button>
-
-      <button
-        type="button"
-        className={`db-quick-btn ${
-          activeNavId === "studio" ? "db-quick-btn--selected" : ""
-        }`}
-        onClick={() => onNavigate("studio")}
-      >
-        <GraduationCap className="db-quick-btn-icon" strokeWidth={2} aria-hidden="true" />
-        <span>Studio</span>
+      <button type="button" className="db-quick-btn" onClick={onOpenStudio}>
+        <FolderOpen
+          className="db-quick-btn-icon"
+          strokeWidth={2}
+          aria-hidden="true"
+        />
+        <span>Repository</span>
       </button>
 
       <button
@@ -70,7 +53,11 @@ export function QuickActionsBar({
         onClick={onTriggerUpload}
         disabled={uploading}
       >
-        <Plus className="db-quick-btn-icon" strokeWidth={2.4} aria-hidden="true" />
+        <Plus
+          className="db-quick-btn-icon"
+          strokeWidth={2.4}
+          aria-hidden="true"
+        />
         <span>{uploading ? "Uploading..." : "Upload PDF"}</span>
       </button>
     </div>

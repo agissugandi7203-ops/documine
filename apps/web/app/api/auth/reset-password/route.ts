@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       status: 400,
       code: "RESET_FAILED",
       message:
-        "Could not update password. Your reset link may have expired — please request a new one.",
+        "Could not update password. Your reset link may have expired; please request a new one.",
     };
     return NextResponse.json(
       { code: err.code, message: err.message },

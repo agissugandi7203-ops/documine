@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from pydantic import BaseModel
 
@@ -8,8 +8,18 @@ from app.core.workspace import WorkspaceContext, get_verified_workspace_context
 from app.db.supabase_client import supabase_db
 from app.models.schemas import DashboardWidget, EChartsOption
 from app.services.duckdb_service import WorkspaceDuckDBSandbox
+from app.services.analytics_report_service import build_dynamic_analytics_report
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+
+class AnalyticsReportBuildRequest(BaseModel):
+    scope_mode: Literal["single_file", "all_files", "folder"] = "all_files"
+    document_id: Optional[str] = None
+    document_ids: Optional[List[str]] = None
+    folder_name: Optional[str] = None
+    focus_prompt: Optional[str] = None
+    force_refresh: bool = False
 
 
 class DashboardWidgetPatchRequest(BaseModel):
@@ -68,11 +78,11 @@ def _build_corpus_intelligence_widget(docs: List[Dict[str, Any]], workspace_id: 
     return DashboardWidget(
         id="widget_corpus_topics",
         workspace_id=workspace_id,
-        title="Distribusi Topik & Kategori Dokumen",
-        subtitle="Analisis deterministik berdasarkan koleksi dokumen aktif Anda",
+        title="Document Topic & Category Distribution",
+        subtitle="Deterministic breakdown across your active workspace documents",
         description=(
-            f"Menampilkan distribusi {len(sorted_topics)} topik utama dari {len(docs)} dokumen di repositori Anda. "
-            "Unggah dokumen dengan tabel numerik atau laporan metrik untuk mengaktifkan grafik perbandingan kuantitatif."
+            f"Showing distribution across {len(sorted_topics)} primary topics from {len(docs)} documents in your repository. "
+            "Upload documents with numeric tables or metrics to enable quantitative comparison charts."
         ),
         widget_type="echarts_chart",
         chart_type="bar",
@@ -81,14 +91,14 @@ def _build_corpus_intelligence_widget(docs: List[Dict[str, Any]], workspace_id: 
         unit_or_currency="documents",
         sql_query="SELECT topic_name, COUNT(doc_id) AS document_count FROM workspace_topics GROUP BY topic_name ORDER BY document_count DESC LIMIT 8",
         echarts_spec=EChartsOption(
-            title={"text": "Distribusi Topik Dokumen", "left": "center"},
+            title={"text": "Document Topic Distribution", "left": "center"},
             tooltip={"trigger": "axis"},
             xAxis={"type": "category", "data": x_labels},
-            yAxis={"type": "value", "name": "Jumlah Dokumen"},
-            series=[{"name": "Dokumen", "type": "bar", "data": y_values}],
+            yAxis={"type": "value", "name": "Documents"},
+            series=[{"name": "Documents", "type": "bar", "data": y_values}],
         ),
         insight_summary=(
-            f"Topik paling dominan di workspace Anda adalah '{x_labels[0]}' ({y_values[0]} dokumen)."
+            f"Most prominent topic in your workspace is '{x_labels[0]}' ({y_values[0]} documents)."
         ),
         source_doc_ids=[str(d["id"]) for d in docs[:10]],
         source_citations=[
@@ -154,6 +164,32 @@ def _build_default_quantitative_sql(
     raise ValueError("No quantitative tables or metrics available.")
 
 
+@router.post("/build-report")
+async def build_analytics_report(
+    req: AnalyticsReportBuildRequest,
+    ctx: WorkspaceContext = Depends(get_verified_workspace_context),
+):
+    """
+    On-demand Dynamic Analytics Report Builder:
+    - Single File (`single_file`): deep multi-chart or qualitative insight breakdown of 1 document
+    - Folder (`folder`): synthesis across all documents in a repository folder
+    - All Files (`all_files`): full workspace synthesis across every document
+    """
+    try:
+        return await build_dynamic_analytics_report(
+            workspace_id=ctx.workspace_id,
+            user_id=ctx.user_id,
+            scope_mode=req.scope_mode,
+            document_id=req.document_id,
+            document_ids=req.document_ids,
+            folder_name=req.folder_name,
+            focus_prompt=req.focus_prompt,
+            force_refresh=req.force_refresh,
+        )
+    except ValueError as err:
+        raise HTTPException(status_code=404, detail=str(err)) from err
+
+
 @router.get("/dashboard")
 async def get_personalized_dashboard(
     ctx: WorkspaceContext = Depends(get_verified_workspace_context),
@@ -186,15 +222,15 @@ async def get_personalized_dashboard(
                     quant_widget = DashboardWidget(
                         id="widget_auto_quantitative",
                         workspace_id=ctx.workspace_id,
-                        title=f"Ikhtisar Metrik Terverifikasi ({unit_label})",
-                        subtitle="Dihitung secara deterministik oleh DuckDB dari dokumen Anda",
-                        description=f"Menampilkan {len(rows)} metrik terverifikasi dalam satuan {unit_label}.",
+                        title=f"Verified Metrics Overview ({unit_label})",
+                        subtitle="Computed deterministically via DuckDB from your documents",
+                        description=f"Showing {len(rows)} verified metrics in {unit_label}.",
                         widget_type="echarts_chart" if len(rows) >= 2 else "kpi_card_group",
                         chart_type="bar" if len(rows) >= 2 else "kpi",
                         unit_or_currency=unit_label,
                         sql_query=exec_res["sql_query"],
                         echarts_spec=EChartsOption(
-                            title={"text": f"Metrik ({unit_label})", "left": "center"},
+                            title={"text": f"Metrics ({unit_label})", "left": "center"},
                             tooltip={"trigger": "axis"},
                             dataset={"source": rows},
                             xAxis={"type": "category", "data": x_vals},
@@ -203,7 +239,7 @@ async def get_personalized_dashboard(
                         ),
                         kpi_payload={"rows": rows, "unit": unit_label},
                         insight_summary=(
-                            f"Nilai tertinggi tercatat pada '{x_vals[0]}' sebesar {y_vals[0]} {unit_label}."
+                            f"Peak value recorded at '{x_vals[0]}' with {y_vals[0]} {unit_label}."
                         ),
                         source_doc_ids=sorted({str(m.get("doc_id")) for m in metrics if m.get("doc_id")})
                         or [str(d["id"]) for d in docs[:3]],
@@ -249,7 +285,7 @@ async def generate_dynamic_dashboard(
         prompt = prompt or body.prompt
         document_id = document_id or body.document_id
         chart_type = body.chart_type or chart_type
-    prompt = prompt or "Tampilkan perbandingan metrik utama dari dokumen saya"
+    prompt = prompt or "Show a comparison of key metrics from my documents"
     doc_ids = [document_id] if document_id else None
     docs = (
         [d for d in [supabase_db.get_workspace_document(ctx.workspace_id, document_id)] if d]
@@ -269,14 +305,14 @@ async def generate_dynamic_dashboard(
         return DashboardWidget(
             id="widget_insufficient_data",
             workspace_id=ctx.workspace_id,
-            title="Belum Ada Data Kuantitatif",
-            subtitle="Unggah dokumen PDF/Excel dengan tabel atau metrik untuk membuat grafik",
-            description="Workspace Anda belum memiliki tabel terstruktur atau metrik angka yang dapat dihitung.",
+            title="No Quantitative Data Available",
+            subtitle="Upload a PDF or spreadsheet with tables or numeric metrics to generate charts",
+            description="Your workspace does not yet contain structured tables or numeric metrics that can be queried.",
             widget_type="insufficient_data_card",
             chart_type="info",
             sql_query=None,
             echarts_spec=EChartsOption(series=[]),
-            insight_summary="Tidak ada data numerik yang ditemukan untuk divisualisasikan.",
+            insight_summary="No numeric series were found to visualize.",
         )
 
     with WorkspaceDuckDBSandbox(ctx.workspace_id, tables, metrics) as sandbox:
@@ -285,7 +321,7 @@ async def generate_dynamic_dashboard(
         x_col = "label"
         y_col = "value"
         unit_label = "value"
-        widget_title = "Analisis Kuantitatif Dokumen"
+        widget_title = "Document Quantitative Analysis"
         widget_subtitle = prompt[:90]
         narrative = ""
         chosen_chart_type = chart_type if chart_type in ("bar", "line", "pie", "scatter", "area") else "bar"

@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  ACCESS_COOKIE,
   PKCE_COOKIE,
-  REFRESH_COOKIE,
+  capSessionMetadataCookies,
   clearAuthCookies,
-  sanitizeUser,
+  isSecureRequest,
+  resolveServerSession,
   setAuthCookies,
   setRecoveryCookie,
   supabaseExchangePkce,
-  supabaseGetUser,
-  supabaseRefreshSession,
   supabaseVerifyOtp,
 } from "@/lib/server/supabase-auth";
 import { sanitizeRedirectPath } from "@/lib/auth-validation";
@@ -21,46 +19,6 @@ function matchesPrefix(pathname: string, prefixes: string[]): boolean {
   return prefixes.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
   );
-}
-
-async function resolveSession(req: NextRequest): Promise<{
-  authenticated: boolean;
-  refreshedSession?: {
-    access_token: string;
-    refresh_token?: string;
-    expires_in?: number;
-  };
-  hadStaleCookies: boolean;
-}> {
-  const accessToken = req.cookies.get(ACCESS_COOKIE)?.value;
-  const refreshToken = req.cookies.get(REFRESH_COOKIE)?.value;
-  const hadStaleCookies = Boolean(accessToken || refreshToken);
-
-  if (accessToken) {
-    const userRes = await supabaseGetUser(accessToken);
-    if (userRes.ok && userRes.data) {
-      const safe = sanitizeUser(userRes.data);
-      if (safe.emailVerified) {
-        return { authenticated: true, hadStaleCookies };
-      }
-    }
-  }
-
-  if (refreshToken) {
-    const refreshRes = await supabaseRefreshSession(refreshToken);
-    if (refreshRes.ok && refreshRes.data?.access_token && refreshRes.data.user) {
-      const safe = sanitizeUser(refreshRes.data.user);
-      if (safe.emailVerified) {
-        return {
-          authenticated: true,
-          refreshedSession: refreshRes.data,
-          hadStaleCookies,
-        };
-      }
-    }
-  }
-
-  return { authenticated: false, hadStaleCookies };
 }
 
 async function handleAuthCallback(req: NextRequest): Promise<NextResponse | null> {
@@ -103,19 +61,23 @@ async function handleAuthCallback(req: NextRequest): Promise<NextResponse | null
         httpOnly: true,
         sameSite: "lax",
         path: "/",
+        secure: isSecureRequest(req),
         maxAge: 0,
+        expires: new Date(0),
       });
       return res;
     }
 
     const dashboardUrl = new URL("/dashboard", req.url);
     const res = NextResponse.redirect(dashboardUrl);
-    setAuthCookies(res, exchangeRes.data, req);
+    await setAuthCookies(res, exchangeRes.data, req);
     res.cookies.set(PKCE_COOKIE, "", {
       httpOnly: true,
       sameSite: "lax",
       path: "/",
+      secure: isSecureRequest(req),
       maxAge: 0,
+      expires: new Date(0),
     });
     return res;
   }
@@ -151,7 +113,7 @@ async function handleAuthCallback(req: NextRequest): Promise<NextResponse | null
     }
 
     const res = NextResponse.redirect(new URL("/dashboard", req.url));
-    setAuthCookies(res, verifyRes.data, req);
+    await setAuthCookies(res, verifyRes.data, req);
     return res;
   }
 
@@ -177,15 +139,9 @@ export async function middleware(req: NextRequest) {
   }
 
   // Fast-path for unauthenticated visitors to guest pages with no auth cookies
-  if (
-    isGuestOnly &&
-    !req.cookies.get(ACCESS_COOKIE)?.value &&
-    !req.cookies.get(REFRESH_COOKIE)?.value
-  ) {
-    return NextResponse.next();
-  }
-
-  const session = await resolveSession(req);
+  const session = await resolveServerSession(req, {
+    verifyAccessWithProvider: true,
+  });
 
   if (isProtected && !session.authenticated) {
     const loginUrl = new URL("/login", req.url);
@@ -193,8 +149,14 @@ export async function middleware(req: NextRequest) {
     if (target !== "/dashboard") {
       loginUrl.searchParams.set("redirect", target);
     }
+    if (
+      session.failureReason === "session_expired" ||
+      session.failureReason === "token_expired"
+    ) {
+      loginUrl.searchParams.set("reason", "session_expired");
+    }
     const res = NextResponse.redirect(loginUrl);
-    if (session.hadStaleCookies) {
+    if (session.shouldClearCookies) {
       clearAuthCookies(res, req);
     }
     return res;
@@ -205,15 +167,23 @@ export async function middleware(req: NextRequest) {
     const destination = sanitizeRedirectPath(redirectParam, "/dashboard");
     const res = NextResponse.redirect(new URL(destination, req.url));
     if (session.refreshedSession) {
-      setAuthCookies(res, session.refreshedSession, req);
+      await setAuthCookies(res, session.refreshedSession, req, {
+        existingSessionExpEpoch: session.sessionExpEpoch,
+      });
+    } else if (session.persistLegacyCap && session.sessionExpEpoch) {
+      await capSessionMetadataCookies(res, req, session.sessionExpEpoch);
     }
     return res;
   }
 
   const res = NextResponse.next();
   if (session.refreshedSession) {
-    setAuthCookies(res, session.refreshedSession, req);
-  } else if (!session.authenticated && session.hadStaleCookies) {
+    await setAuthCookies(res, session.refreshedSession, req, {
+      existingSessionExpEpoch: session.sessionExpEpoch,
+    });
+  } else if (session.persistLegacyCap && session.sessionExpEpoch) {
+    await capSessionMetadataCookies(res, req, session.sessionExpEpoch);
+  } else if (!session.authenticated && session.shouldClearCookies) {
     clearAuthCookies(res, req);
   }
   return res;

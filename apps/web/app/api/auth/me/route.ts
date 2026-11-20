@@ -1,51 +1,65 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  ACCESS_COOKIE,
   REFRESH_COOKIE,
+  capSessionMetadataCookies,
   clearAuthCookies,
-  sanitizeUser,
+  resolveServerSession,
   setAuthCookies,
-  supabaseGetUser,
-  supabaseRefreshSession,
 } from "@/lib/server/supabase-auth";
 
 export async function GET(req: NextRequest) {
-  const accessToken = req.cookies.get(ACCESS_COOKIE)?.value;
-  const refreshToken = req.cookies.get(REFRESH_COOKIE)?.value;
+  const session = await resolveServerSession(req, {
+    verifyAccessWithProvider: true,
+  });
 
-  if (accessToken) {
-    const userRes = await supabaseGetUser(accessToken);
-    if (userRes.ok && userRes.data) {
-      const safeUser = sanitizeUser(userRes.data);
-      if (safeUser.emailVerified) {
-        return NextResponse.json({
-          authenticated: true,
-          user: safeUser,
-        });
-      }
-    }
-  }
+  if (session.authenticated && session.user) {
+    const response = NextResponse.json({
+      authenticated: true,
+      user: session.user,
+      expiresAt: session.accessExpEpoch ?? null,
+      sessionExpiresAt: session.sessionExpEpoch ?? null,
+      idleExpiresAt: session.idleExpiresAtEpoch ?? null,
+    });
 
-  if (refreshToken) {
-    const refreshRes = await supabaseRefreshSession(refreshToken);
-    if (refreshRes.ok && refreshRes.data?.access_token && refreshRes.data.user) {
-      const safeUser = sanitizeUser(refreshRes.data.user);
-      if (safeUser.emailVerified) {
-        const response = NextResponse.json({
-          authenticated: true,
-          user: safeUser,
-        });
-        setAuthCookies(response, refreshRes.data, req);
-        return response;
+    if (session.refreshedSession) {
+      const updated = await setAuthCookies(response, session.refreshedSession, req, {
+        existingSessionExpEpoch: session.sessionExpEpoch,
+      });
+      if (!updated) {
+        return NextResponse.json(
+          {
+            authenticated: false,
+            user: null,
+            expiresAt: null,
+            sessionExpiresAt: null,
+            reason: "session_expired",
+          },
+          { status: 200, headers: response.headers }
+        );
       }
+    } else if (session.persistLegacyCap && session.sessionExpEpoch) {
+      await capSessionMetadataCookies(
+        response,
+        req,
+        session.sessionExpEpoch,
+        req.cookies.get(REFRESH_COOKIE)?.value
+      );
     }
+
+    return response;
   }
 
   const unauth = NextResponse.json(
-    { authenticated: false, user: null },
+    {
+      authenticated: false,
+      user: null,
+      expiresAt: null,
+      sessionExpiresAt: null,
+      reason: session.failureReason ?? "missing_session",
+    },
     { status: 200 }
   );
-  if (accessToken || refreshToken) {
+  if (session.shouldClearCookies) {
     clearAuthCookies(unauth, req);
   }
   return unauth;

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { GripVertical } from "lucide-react";
+import { ArrowUpRight, GripVertical } from "lucide-react";
 import type { PreviewLayerItem } from "./types";
 
 interface PreviewItemProps {
@@ -25,8 +25,8 @@ function clamp(val: number, min: number, max: number): number {
 }
 
 /**
- * Physical playing-card style preview item supporting smooth pointer drag
- * and live slot switching with zero blur.
+ * Illustrated Atelier quick-stage card displaying clean editorial art on the
+ * right side, live workspace stats on the left, and a direct shortcut button.
  */
 export function PreviewItem({
   item,
@@ -70,7 +70,7 @@ export function PreviewItem({
           ? "box-shadow 140ms ease, border-color 140ms ease"
           : "top 240ms cubic-bezier(0.22, 1, 0.36, 1), transform 240ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 180ms ease, border-color 180ms ease",
       }}
-      aria-label={`${item.title}: ${item.subtitle}. Drag to switch position`}
+      aria-label={`${item.title}: ${item.statValue || item.metric || "Open"}. Click to open ${item.canvasTag} or drag to reorder`}
       aria-pressed={selected}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -83,19 +83,49 @@ export function PreviewItem({
         }
       }}
     >
+      <img
+        src={item.imageSrc}
+        alt=""
+        draggable={false}
+        className="db-preview-card-art"
+        aria-hidden="true"
+      />
+      <span className="db-preview-scrim" aria-hidden="true" />
+
       <span className="db-preview-indicator" aria-hidden="true">
         <GripVertical className="db-preview-grip-icon" strokeWidth={2} />
       </span>
 
-      <div className="db-preview-content">
-        <div className="db-preview-row">
-          <span className="db-preview-title">
+      <div className="db-preview-card-body">
+        <div className="db-preview-chip-bar">
+          <span className="db-preview-title-pill">
             <span className="db-preview-code">{item.code}</span>
-            {item.title}
+            <span className="db-preview-title-text">{item.title}</span>
           </span>
-          {item.metric && <span className="db-preview-badge">{item.metric}</span>}
+
+          <button
+            type="button"
+            className="db-preview-shortcut-btn"
+            aria-label={`Open ${item.canvasTag}`}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onKeySelect();
+            }}
+          >
+            <span>{item.shortcutLabel || item.canvasTag}</span>
+            <ArrowUpRight size={11} strokeWidth={2.4} />
+          </button>
         </div>
-        <span className="db-preview-subtitle">{item.subtitle}</span>
+
+        <div className="db-preview-sub-row">
+          <span className="db-preview-stat-val">
+            {item.statValue || item.metric || "-"}
+          </span>
+          <span className="db-preview-subtitle">
+            {item.statDetail || item.subtitle}
+          </span>
+        </div>
       </div>
     </div>
   );

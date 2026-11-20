@@ -117,6 +117,15 @@ export async function POST(req: NextRequest) {
     user: safeUser,
   });
 
-  setAuthCookies(response, result.data, req);
+  const cookieMeta = await setAuthCookies(response, result.data, req);
+  if (!cookieMeta) {
+    return NextResponse.json(
+      {
+        code: "TOKEN_EXPIRED",
+        message: "Received an expired or invalid session token. Please try again.",
+      },
+      { status: 401, headers: response.headers }
+    );
+  }
   return response;
 }

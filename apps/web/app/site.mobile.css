@@ -1,0 +1,165 @@
+/* =========================================================
+   GLOBAL MOBILE & TABLET RESPONSIVE OVERRIDES (< 1024px)
+   Loaded after globals.css; desktop (>= 1024px) stays untouched.
+   ========================================================= */
+
+@media (max-width: 1023px) {
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+}
+
+@media (max-width: 767px), (max-height: 680px) and (max-width: 1023px) {
+  .hero-wrapper {
+    height: auto;
+    min-height: 100svh;
+    overflow: visible;
+  }
+
+  .hero-page {
+    min-height: 100svh;
+    gap: 30px;
+    padding-inline: 18px;
+    padding-top: max(84px, calc(68px + env(safe-area-inset-top)));
+    padding-bottom: max(32px, calc(22px + env(safe-area-inset-bottom)));
+  }
+
+  .header-sticky-wrapper {
+    top: max(14px, env(safe-area-inset-top));
+    padding-inline: 16px;
+  }
+
+  /* Keep mobile scrolling smooth: avoid live backdrop-blur & offscreen video decoder spikes on phones */
+  .mobile-sheet,
+  .vexor-toast {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  .card {
+    contain: layout paint style;
+  }
+
+  .stage .gauge,
+  .stage .context-backdrop {
+    filter: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .trust-row {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+  }
+
+  .mobile-sheet {
+    top: max(82px, calc(68px + env(safe-area-inset-top)));
+    max-height: calc(100dvh - 104px);
+    padding: 20px 18px;
+    gap: 12px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mobile-nav-link,
+  .mobile-signin-btn {
+    min-height: 46px;
+  }
+
+  .burger-btn {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .stage,
+  .showcase-section,
+  .vexor-section,
+  .falcon-footer {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .stage {
+    padding: 48px 18px;
+    gap: 28px;
+  }
+
+  .cards {
+    gap: 20px;
+  }
+
+  .cards .card--speed,
+  .cards .card--context {
+    max-width: 100%;
+  }
+
+  .showcase-section,
+  .vexor-section {
+    padding: 52px 18px;
+  }
+
+  .sc-editor-panel,
+  .sc-canvas {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .vexor-input {
+    font-size: 16px;
+  }
+
+  .falcon-footer {
+    padding: 44px 20px max(38px, calc(28px + env(safe-area-inset-bottom)));
+  }
+
+  .falcon-footer-top {
+    gap: 32px;
+  }
+
+  .falcon-footer-cols {
+    gap: 26px 20px;
+  }
+}
+
+@media (max-width: 479px) {
+  .vexor-form {
+    flex-direction: column;
+    align-items: stretch;
+    border-radius: 20px;
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .vexor-input {
+    padding: 10px 12px;
+    text-align: center;
+  }
+
+  .vexor-btn {
+    width: 100%;
+    min-height: 46px;
+  }
+
+  /* Auth pages mobile breathing room */
+  .signal-stage .signal-topbar {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .signal-stage .auth-form {
+    gap: 16px;
+  }
+
+  .signal-stage .auth-btn-primary,
+  .signal-stage .auth-btn-google {
+    min-height: 48px;
+  }
+
+  .signal-stage .auth-row {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
