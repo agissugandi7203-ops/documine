@@ -90,11 +90,12 @@ function getSupabaseConfig(): { url: string; apiKey: string } {
 }
 
 export function getPublicSupabaseUrl(): string {
-  return (
+  const raw = (
     process.env.SUPABASE_URL ||
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
     ""
-  ).replace(/\/+$/, "");
+  ).trim();
+  return raw.replace(/\/+$/, "");
 }
 
 export function sanitizeUser(user: SupabaseUserPayload): SafeUser {
@@ -600,6 +601,11 @@ export function buildGoogleOAuthUrl(
   codeChallenge: string
 ): string {
   const baseUrl = getPublicSupabaseUrl();
+  if (!/^https?:\/\/[^\s]+$/i.test(baseUrl)) {
+    throw new Error(
+      "Supabase URL is missing or invalid. Set SUPABASE_URL and NEXT_PUBLIC_SUPABASE_URL in your deployment environment."
+    );
+  }
   const params = new URLSearchParams({
     provider: "google",
     redirect_to: redirectTo,
@@ -611,10 +617,13 @@ export function buildGoogleOAuthUrl(
 }
 
 export function getOriginFromRequest(req: NextRequest): string {
-  const proto =
+  const rawProto =
     req.headers.get("x-forwarded-proto") ||
-    (req.nextUrl.protocol ? req.nextUrl.protocol.replace(":", "") : "http");
-  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+    (req.nextUrl.protocol ? req.nextUrl.protocol.replace(":", "") : "https");
+  const proto = rawProto.split(",")[0]?.trim() || "https";
+  const rawHost =
+    req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
+  const host = rawHost.split(",")[0]?.trim();
   if (host) return `${proto}://${host}`;
   return req.nextUrl.origin;
 }
