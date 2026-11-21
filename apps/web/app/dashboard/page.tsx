@@ -120,6 +120,7 @@ export default function DashboardPage() {
   const [navRestored, setNavRestored] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [graphTheme, setGraphTheme] = useState<"light" | "dark">("light");
+  const [homeRightRailCollapsed, setHomeRightRailCollapsed] = useState(true);
   const [rightRailCollapsed, setRightRailCollapsed] = useState(false);
   const [previewMinimized, setPreviewMinimized] = useState(false);
   const [progressMinimized, setProgressMinimized] = useState(false);
@@ -1276,10 +1277,20 @@ export default function DashboardPage() {
     }, [summary, documents, activeDocStatus]);
 
   const showRightColumn =
-    activeNavId !== "homes" &&
     activeNavId !== "chat" &&
     activeNavId !== "repository" &&
     activeNavId !== "analytics";
+
+  const effectiveRightRailCollapsed =
+    activeNavId === "homes" ? homeRightRailCollapsed : rightRailCollapsed;
+
+  const setEffectiveRightRailCollapsed = (collapsed: boolean) => {
+    if (activeNavId === "homes") {
+      setHomeRightRailCollapsed(collapsed);
+    } else {
+      setRightRailCollapsed(collapsed);
+    }
+  };
 
   const displayName = user?.username || user?.email?.split("@")[0] || "Creator";
 
@@ -1556,18 +1567,18 @@ export default function DashboardPage() {
             {showRightColumn && (
               <aside
                 className={`db-right-column ${
-                  rightRailCollapsed ? "db-right-column--collapsed" : ""
+                  effectiveRightRailCollapsed ? "db-right-column--collapsed" : ""
                 }`}
                 aria-label="Quick Stage, Progress and Pie Distribution"
               >
-                {rightRailCollapsed ? (
+                {effectiveRightRailCollapsed ? (
                   <div className="db-right-collapsed-dock">
                     <button
                       type="button"
                       className="db-right-dock-btn"
-                      aria-label="Expand right rail"
-                      data-tooltip="Expand"
-                      onClick={() => setRightRailCollapsed(false)}
+                      aria-label="Expand Quick Stage"
+                      data-tooltip="Quick Stage"
+                      onClick={() => setEffectiveRightRailCollapsed(false)}
                     >
                       <PanelRightOpen size={16} />
                     </button>
@@ -1578,7 +1589,7 @@ export default function DashboardPage() {
                       aria-label="Open card stage"
                       data-tooltip="Cards"
                       onClick={() => {
-                        setRightRailCollapsed(false);
+                        setEffectiveRightRailCollapsed(false);
                         setPreviewMinimized(false);
                       }}
                     >
@@ -1590,7 +1601,7 @@ export default function DashboardPage() {
                       className="db-right-dock-btn"
                       aria-label="Show workspace chart"
                       data-tooltip="Pie Mix"
-                      onClick={() => setRightRailCollapsed(false)}
+                      onClick={() => setEffectiveRightRailCollapsed(false)}
                     >
                       <PieChart size={15} />
                     </button>
@@ -1604,7 +1615,7 @@ export default function DashboardPage() {
                       onToggleMinimize={() =>
                         setPreviewMinimized((prev) => !prev)
                       }
-                      onCollapseRail={() => setRightRailCollapsed(true)}
+                      onCollapseRail={() => setEffectiveRightRailCollapsed(true)}
                       onSelectPreview={handleSelectPreview}
                       onReorderPreviews={handleReorderPreviews}
                       onDropPreviewToCanvas={(idx) => {

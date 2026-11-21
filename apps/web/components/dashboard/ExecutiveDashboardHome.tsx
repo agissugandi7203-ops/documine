@@ -7,14 +7,11 @@ import {
   ArrowUpRight,
   BarChart3,
   Check,
-  ChevronDown,
-  ChevronUp,
   Database,
   Download,
   FileSpreadsheet,
   FileText,
   FolderOpen,
-  Headphones,
   Layers,
   MessageSquare,
   Network,
@@ -191,9 +188,6 @@ export function ExecutiveDashboardHome({
   onUpdateDocumentMeta,
   onRequestDeleteDoc,
 }: ExecutiveDashboardHomeProps) {
-  // Quick Stage starts minimized when user first opens Home
-  const [quickStageOpen, setQuickStageOpen] = useState(false);
-
   // Interactive chart type switchers (matching Column, Bar, Pie, Line, Area, Surface)
   const [trendMode, setTrendMode] = useState<"area" | "line" | "column">("area");
   const [pieMode, setPieMode] = useState<"donut" | "pie">("donut");
@@ -945,98 +939,6 @@ export function ExecutiveDashboardHome({
             <ArrowUpRight size={13} />
           </button>
         </div>
-      </div>
-
-      {/* Quick Stage (Minimized by default on first entry; expands on demand) */}
-      <div className={`ex-quick-stage ${quickStageOpen ? "is-open" : ""}`}>
-        <div className="ex-quick-stage-bar">
-          <div className="ex-quick-stage-info">
-            <span className="ex-quick-stage-tag">Quick Stage</span>
-            <span className="ex-quick-stage-sub">
-              {quickStageOpen
-                ? "Jump straight into any workspace pillar"
-                : "5 workspace shortcuts ready"}
-            </span>
-          </div>
-          <button
-            type="button"
-            className="ex-quick-stage-toggle"
-            aria-expanded={quickStageOpen}
-            onClick={() => setQuickStageOpen((prev) => !prev)}
-          >
-            <span>{quickStageOpen ? "Minimize" : "Expand"}</span>
-            {quickStageOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-          </button>
-        </div>
-
-        {quickStageOpen && (
-          <div className="ex-quick-stage-grid">
-            <button
-              type="button"
-              className="ex-quick-stage-tile"
-              onClick={() => onAskDocInChat("all")}
-            >
-              <div className="ex-quick-stage-tile-top">
-                <MessageSquare size={15} />
-                <ArrowUpRight size={13} />
-              </div>
-              <strong>AI Chat</strong>
-              <span>Ask grounded questions with citations</span>
-            </button>
-
-            <button
-              type="button"
-              className="ex-quick-stage-tile"
-              onClick={() => onSelectNav("repository")}
-            >
-              <div className="ex-quick-stage-tile-top">
-                <FolderOpen size={15} />
-                <ArrowUpRight size={13} />
-              </div>
-              <strong>Repository IDE</strong>
-              <span>{kpi.totalDocs} files · folders &amp; viewer</span>
-            </button>
-
-            <button
-              type="button"
-              className="ex-quick-stage-tile"
-              onClick={() => onSelectNav("layers")}
-            >
-              <div className="ex-quick-stage-tile-top">
-                <Network size={15} />
-                <ArrowUpRight size={13} />
-              </div>
-              <strong>Knowledge Graph</strong>
-              <span>{kpi.totalLinks} links · AI relationship map</span>
-            </button>
-
-            <button
-              type="button"
-              className="ex-quick-stage-tile"
-              onClick={() => onSelectNav("analytics")}
-            >
-              <div className="ex-quick-stage-tile-top">
-                <BarChart3 size={15} />
-                <ArrowUpRight size={13} />
-              </div>
-              <strong>Analytics Studio</strong>
-              <span>{kpi.totalTables} tables · DuckDB charts</span>
-            </button>
-
-            <button
-              type="button"
-              className="ex-quick-stage-tile"
-              onClick={() => onSelectNav("studio")}
-            >
-              <div className="ex-quick-stage-tile-top">
-                <Headphones size={15} />
-                <ArrowUpRight size={13} />
-              </div>
-              <strong>Audio &amp; Quiz Studio</strong>
-              <span>OpenAI TTS podcast &amp; study quizzes</span>
-            </button>
-          </div>
-        )}
       </div>
 
       {/* ROW 1: 4 Executive KPI Cards */}
