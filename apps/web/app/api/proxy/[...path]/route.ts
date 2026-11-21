@@ -11,11 +11,21 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const FASTAPI_URL = (
-  process.env.FASTAPI_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:8000"
-).replace(/\/+$/, "");
+function resolveFastApiBaseUrl(): string {
+  const raw = (
+    process.env.FASTAPI_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    "http://localhost:8000"
+  ).trim();
+  const withProto = /^https?:\/\//i.test(raw)
+    ? raw
+    : raw.startsWith("localhost") || raw.startsWith("127.0.0.1")
+    ? `http://${raw}`
+    : `https://${raw}`;
+  return withProto.replace(/\/+$/, "").replace(/\/api$/i, "");
+}
+
+const FASTAPI_URL = resolveFastApiBaseUrl();
 
 async function handleProxy(
   req: NextRequest,

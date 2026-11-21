@@ -7,10 +7,14 @@ import {
   ArrowUpRight,
   BarChart3,
   Check,
+  ChevronDown,
+  ChevronUp,
   Database,
   Download,
   FileSpreadsheet,
   FileText,
+  FolderOpen,
+  Headphones,
   Layers,
   MessageSquare,
   Network,
@@ -187,6 +191,9 @@ export function ExecutiveDashboardHome({
   onUpdateDocumentMeta,
   onRequestDeleteDoc,
 }: ExecutiveDashboardHomeProps) {
+  // Quick Stage starts minimized when user first opens Home
+  const [quickStageOpen, setQuickStageOpen] = useState(false);
+
   // Interactive chart type switchers (matching Column, Bar, Pie, Line, Area, Surface)
   const [trendMode, setTrendMode] = useState<"area" | "line" | "column">("area");
   const [pieMode, setPieMode] = useState<"donut" | "pie">("donut");
@@ -940,6 +947,98 @@ export function ExecutiveDashboardHome({
         </div>
       </div>
 
+      {/* Quick Stage (Minimized by default on first entry; expands on demand) */}
+      <div className={`ex-quick-stage ${quickStageOpen ? "is-open" : ""}`}>
+        <div className="ex-quick-stage-bar">
+          <div className="ex-quick-stage-info">
+            <span className="ex-quick-stage-tag">Quick Stage</span>
+            <span className="ex-quick-stage-sub">
+              {quickStageOpen
+                ? "Jump straight into any workspace pillar"
+                : "5 workspace shortcuts ready"}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="ex-quick-stage-toggle"
+            aria-expanded={quickStageOpen}
+            onClick={() => setQuickStageOpen((prev) => !prev)}
+          >
+            <span>{quickStageOpen ? "Minimize" : "Expand"}</span>
+            {quickStageOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+          </button>
+        </div>
+
+        {quickStageOpen && (
+          <div className="ex-quick-stage-grid">
+            <button
+              type="button"
+              className="ex-quick-stage-tile"
+              onClick={() => onAskDocInChat("all")}
+            >
+              <div className="ex-quick-stage-tile-top">
+                <MessageSquare size={15} />
+                <ArrowUpRight size={13} />
+              </div>
+              <strong>AI Chat</strong>
+              <span>Ask grounded questions with citations</span>
+            </button>
+
+            <button
+              type="button"
+              className="ex-quick-stage-tile"
+              onClick={() => onSelectNav("repository")}
+            >
+              <div className="ex-quick-stage-tile-top">
+                <FolderOpen size={15} />
+                <ArrowUpRight size={13} />
+              </div>
+              <strong>Repository IDE</strong>
+              <span>{kpi.totalDocs} files · folders &amp; viewer</span>
+            </button>
+
+            <button
+              type="button"
+              className="ex-quick-stage-tile"
+              onClick={() => onSelectNav("layers")}
+            >
+              <div className="ex-quick-stage-tile-top">
+                <Network size={15} />
+                <ArrowUpRight size={13} />
+              </div>
+              <strong>Knowledge Graph</strong>
+              <span>{kpi.totalLinks} links · AI relationship map</span>
+            </button>
+
+            <button
+              type="button"
+              className="ex-quick-stage-tile"
+              onClick={() => onSelectNav("analytics")}
+            >
+              <div className="ex-quick-stage-tile-top">
+                <BarChart3 size={15} />
+                <ArrowUpRight size={13} />
+              </div>
+              <strong>Analytics Studio</strong>
+              <span>{kpi.totalTables} tables · DuckDB charts</span>
+            </button>
+
+            <button
+              type="button"
+              className="ex-quick-stage-tile"
+              onClick={() => onSelectNav("studio")}
+            >
+              <div className="ex-quick-stage-tile-top">
+                <Headphones size={15} />
+                <ArrowUpRight size={13} />
+              </div>
+              <strong>Audio &amp; Quiz Studio</strong>
+              <span>OpenAI TTS podcast &amp; study quizzes</span>
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* ROW 1: 4 Executive KPI Cards */}
       <section className="ex-kpi-row" aria-label="Workspace Key Metrics">
         <article className="ex-kpi-card">
@@ -960,9 +1059,19 @@ export function ExecutiveDashboardHome({
               <MiniSpark values={kpi.pageSeries} color="#e85a24" type="line" />
             </div>
           </div>
-          <span className="ex-kpi-foot">
-            {kpi.readyDocs} ready · {categoryBreakdown.items.length} categories
-          </span>
+          <div className="ex-kpi-foot-row">
+            <span className="ex-kpi-foot">
+              {kpi.readyDocs} ready · {categoryBreakdown.items.length} categories
+            </span>
+            <button
+              type="button"
+              className="ex-kpi-shortcut"
+              onClick={() => onSelectNav("repository")}
+            >
+              <span>Repo</span>
+              <ArrowUpRight size={11} />
+            </button>
+          </div>
         </article>
 
         <article className="ex-kpi-card">
@@ -983,7 +1092,17 @@ export function ExecutiveDashboardHome({
               <MiniSpark values={kpi.pageSeries} color="#2c6b58" type="bar" />
             </div>
           </div>
-          <span className="ex-kpi-foot">Full-text &amp; semantic vector chunks</span>
+          <div className="ex-kpi-foot-row">
+            <span className="ex-kpi-foot">Full-text &amp; vector chunks</span>
+            <button
+              type="button"
+              className="ex-kpi-shortcut"
+              onClick={() => onAskDocInChat("all")}
+            >
+              <span>Ask AI</span>
+              <ArrowUpRight size={11} />
+            </button>
+          </div>
         </article>
 
         <article className="ex-kpi-card">
@@ -1005,9 +1124,19 @@ export function ExecutiveDashboardHome({
               <MiniSpark values={kpi.dataSeries} color="#2563eb" type="line" />
             </div>
           </div>
-          <span className="ex-kpi-foot">
-            {kpi.totalTables} tables · {kpi.totalMetrics} extracted KPIs
-          </span>
+          <div className="ex-kpi-foot-row">
+            <span className="ex-kpi-foot">
+              {kpi.totalTables} tables · {kpi.totalMetrics} extracted KPIs
+            </span>
+            <button
+              type="button"
+              className="ex-kpi-shortcut"
+              onClick={() => onSelectNav("analytics")}
+            >
+              <span>Analytics</span>
+              <ArrowUpRight size={11} />
+            </button>
+          </div>
         </article>
 
         <article className="ex-kpi-card">
@@ -1031,10 +1160,19 @@ export function ExecutiveDashboardHome({
               />
             </div>
           </div>
-          <span className="ex-kpi-foot">
-            Cross-document links · {kpi.storagePct}% of{" "}
-            {formatBytes(kpi.limitBytes)}
-          </span>
+          <div className="ex-kpi-foot-row">
+            <span className="ex-kpi-foot">
+              {kpi.storagePct}% of {formatBytes(kpi.limitBytes)}
+            </span>
+            <button
+              type="button"
+              className="ex-kpi-shortcut"
+              onClick={() => onSelectNav("layers")}
+            >
+              <span>{kpi.totalLinks > 0 ? "Graph" : "Connect"}</span>
+              <ArrowUpRight size={11} />
+            </button>
+          </div>
         </article>
       </section>
 

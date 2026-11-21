@@ -7,7 +7,8 @@ class Settings(BaseSettings):
     app_env: str = "development"
     port: int = 8000
     host: str = "0.0.0.0"
-    allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000,https://documine-tzlh.vercel.app"
+    frontend_url: str = ""
 
     # Provider-Flexible AI Gateway & Official OpenAI Configuration (ADR-006, ADR-007, ADR-008, ADR-017)
     ai_default_provider: str = "openai"
@@ -17,6 +18,7 @@ class Settings(BaseSettings):
     openai_model_fast: str = "gpt-6-luna"
     openai_model_balanced: str = "gpt-6.1-terra"
     openai_model_deep: str = "gpt-6.1-sol"
+    openai_tts_model: str = "gpt-4o-mini-tts"
     openai_store_completions: bool = False
     openai_timeout_seconds: float = 35.0
 
@@ -70,7 +72,16 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> List[str]:
-        return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
+        origins = [
+            origin.strip().rstrip("/")
+            for origin in self.allowed_origins.split(",")
+            if origin.strip()
+        ]
+        if self.frontend_url.strip():
+            fe = self.frontend_url.strip().rstrip("/")
+            if fe not in origins:
+                origins.append(fe)
+        return origins
 
 
 settings = Settings()

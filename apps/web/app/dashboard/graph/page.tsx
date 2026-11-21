@@ -36,6 +36,7 @@ export default function DashboardGraphPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [authReady, setAuthReady] = useState(false);
+  const [graphLoaded, setGraphLoaded] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [graphTheme, setGraphTheme] = useState<"light" | "dark">("light");
@@ -90,8 +91,10 @@ export default function DashboardGraphPage() {
           return;
         }
         setUser(currentUser);
-        setAuthReady(true);
         await loadGraphData();
+        if (!active) return;
+        setGraphLoaded(true);
+        setAuthReady(true);
       } catch {
         if (!active) return;
         window.location.replace("/login");
@@ -173,7 +176,7 @@ export default function DashboardGraphPage() {
     };
   }, [summary]);
 
-  if (!authReady) {
+  if (!authReady || !graphLoaded) {
     return (
       <div className="db-viewport db-viewport--graph-full">
         <DashboardFrame>

@@ -187,3 +187,14 @@ export const INITIAL_DECK_LAYERS: DeckLayerItem[] = [
 ];
 
 export const PRESET_STEPS = [0, 1, 2, 3, 4] as const;
+
+export interface WorkspaceNotification {
+  id: string;
+  title: string;
+  detail: string;
+  tone: "info" | "success" | "warning" | "error";
+  timestamp: string;
+  read: boolean;
+  targetNav?: DashboardSectionId;
+  docId?: string;
+}

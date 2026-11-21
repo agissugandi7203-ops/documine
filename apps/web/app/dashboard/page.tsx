@@ -57,6 +57,7 @@ import {
   NAV_ITEMS,
   type DashboardSectionId,
   type PreviewLayerItem,
+  type WorkspaceNotification,
 } from "@/components/dashboard/types";
 import "@/app/dashboard/dashboard.css";
 
@@ -112,6 +113,7 @@ export default function DashboardPage() {
   const [workspaceId, setWorkspaceId] = useState<string | undefined>(undefined);
   const [backendOnline, setBackendOnline] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
+  const [initialDocsLoaded, setInitialDocsLoaded] = useState(false);
 
   // Navigation: default first page is "homes"; restored from URL/sessionStorage before persisting
   const [activeNavId, setActiveNavId] = useState<DashboardSectionId>("homes");
@@ -152,6 +154,66 @@ export default function DashboardPage() {
     useState<DocumentStatusInfo | null>(null);
 
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
+
+  const pushNotification = useCallback(
+    (entry: {
+      title: string;
+      detail: string;
+      tone?: WorkspaceNotification["tone"];
+      targetNav?: DashboardSectionId;
+      docId?: string;
+    }) => {
+      const nowLabel = new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      setNotifications((prev) => {
+        const next: WorkspaceNotification[] = [
+          {
+            id: `nt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            title: entry.title,
+            detail: entry.detail,
+            tone: entry.tone || "info",
+            timestamp: nowLabel,
+            read: false,
+            targetNav: entry.targetNav,
+            docId: entry.docId,
+          },
+          ...prev,
+        ].slice(0, 20);
+        try {
+          if (user?.id) {
+            window.localStorage.setItem(
+              `documind:notifications:${user.id}`,
+              JSON.stringify(next)
+            );
+          }
+        } catch {
+          // ignore storage quota
+        }
+        return next;
+      });
+    },
+    [user?.id]
+  );
+
+  useEffect(() => {
+    if (!user?.id) return;
+    try {
+      const raw = window.localStorage.getItem(
+        `documind:notifications:${user.id}`
+      );
+      if (raw) {
+        const parsed = JSON.parse(raw) as WorkspaceNotification[];
+        if (Array.isArray(parsed)) {
+          setNotifications(parsed);
+        }
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [user?.id]);
 
   const uploading = useMemo(
     () =>
@@ -197,55 +259,47 @@ export default function DashboardPage() {
 
   const loadWorkspaceData = useCallback(async () => {
     setLoadingData(true);
+    let anySucceeded = false;
+
+    const sessionTask = dashboardApi.getSession().then((res) => {
+      anySucceeded = true;
+      setWorkspaceName(res.workspace?.name || "Personal Workspace");
+      setWorkspaceId(res.workspace?.id);
+    });
+
+    const summaryTask = dashboardApi.getDocumentsSummary().then((res) => {
+      anySucceeded = true;
+      setSummary(res);
+    });
+
+    const docsTask = dashboardApi.listDocuments().then((docs) => {
+      anySucceeded = true;
+      setDocuments(docs);
+      setSelectedDocId((prev) =>
+        prev && docs.some((d) => d.id === prev) ? prev : docs[0]?.id ?? null
+      );
+    });
+
+    const analyticsTask = dashboardApi.getAnalyticsDashboard().then((res) => {
+      anySucceeded = true;
+      setAnalytics(res);
+    });
+
+    const relTask = dashboardApi.getRelationships(0.0).then((res) => {
+      anySucceeded = true;
+      setRelationships(res);
+    });
+
     try {
-      const [sessionRes, summaryRes, docsRes, analyticsRes, relRes] =
-        await Promise.allSettled([
-          dashboardApi.getSession(),
-          dashboardApi.getDocumentsSummary(),
-          dashboardApi.listDocuments(),
-          dashboardApi.getAnalyticsDashboard(),
-          dashboardApi.getRelationships(0.0),
-        ]);
-
-      let anySucceeded = false;
-
-      if (sessionRes.status === "fulfilled") {
-        anySucceeded = true;
-        setWorkspaceName(
-          sessionRes.value.workspace?.name || "Personal Workspace"
-        );
-        setWorkspaceId(sessionRes.value.workspace?.id);
-      }
-
-      if (summaryRes.status === "fulfilled") {
-        anySucceeded = true;
-        setSummary(summaryRes.value);
-      }
-
-      if (docsRes.status === "fulfilled") {
-        anySucceeded = true;
-        const docs = docsRes.value;
-        setDocuments(docs);
-        setSelectedDocId((prev) =>
-          prev && docs.some((d) => d.id === prev) ? prev : docs[0]?.id ?? null
-        );
-      }
-
-      if (analyticsRes.status === "fulfilled") {
-        anySucceeded = true;
-        setAnalytics(analyticsRes.value);
-      }
-
-      if (relRes.status === "fulfilled") {
-        anySucceeded = true;
-        setRelationships(relRes.value);
-      }
-
+      await Promise.allSettled([sessionTask, summaryTask, docsTask]);
+      setInitialDocsLoaded(true);
+      await Promise.allSettled([analyticsTask, relTask]);
       setBackendOnline(anySucceeded);
       setStatusIndicatorActive(anySucceeded);
     } catch {
-      setBackendOnline(false);
-      setStatusIndicatorActive(false);
+      setInitialDocsLoaded(true);
+      setBackendOnline(anySucceeded);
+      setStatusIndicatorActive(anySucceeded);
     } finally {
       setLoadingData(false);
     }
@@ -735,7 +789,11 @@ export default function DashboardPage() {
         }
 
         setSelectedDocId(uploaded.id);
-        await loadWorkspaceData();
+        setDocuments((prev) => [
+          uploaded,
+          ...prev.filter((d) => d.id !== uploaded.id),
+        ]);
+        void loadWorkspaceData();
 
         const initialStatus = (
           uploaded.status ||
@@ -778,6 +836,13 @@ export default function DashboardPage() {
                   )
                 );
                 await loadWorkspaceData();
+                pushNotification({
+                  title: "Document indexed",
+                  detail: `"${uploaded.title || file.name}" is ready for Chat, Analytics & Graph.`,
+                  tone: "success",
+                  targetNav: "repository",
+                  docId: uploaded.id,
+                });
                 return { filename: file.name, doc: uploaded };
               }
               if (lower === "failed") {
@@ -796,6 +861,13 @@ export default function DashboardPage() {
                   )
                 );
                 await loadWorkspaceData();
+                pushNotification({
+                  title: "Processing failed",
+                  detail: `${file.name}: ${msg}`,
+                  tone: "error",
+                  targetNav: "repository",
+                  docId: uploaded.id,
+                });
                 return { filename: file.name, error: msg };
               }
               setUploadTasks((prev) =>
@@ -1044,12 +1116,18 @@ export default function DashboardPage() {
     }
   };
 
-  const handleRunSynthesis = async (docIds: string[]) => {
+  const handleRunSynthesis = async (docIds: string[], focusQuery?: string) => {
     if (docIds.length < 2) return;
     setSynthesisLoading(true);
     try {
-      const res = await dashboardApi.compareSynthesis(docIds);
+      const res = await dashboardApi.compareSynthesis(docIds, focusQuery);
       setSynthesisResult(res);
+      pushNotification({
+        title: "Cross-document synthesis ready",
+        detail: res.synthesis_headline,
+        tone: "success",
+        targetNav: "synthesis",
+      });
     } catch (err) {
       setUploadError(
         err instanceof Error ? err.message : "Cross-document synthesis failed."
@@ -1064,6 +1142,12 @@ export default function DashboardPage() {
       await dashboardApi.recomputeRelationships();
       const updated = await dashboardApi.getRelationships(0.0);
       setRelationships(updated);
+      pushNotification({
+        title: "Graph links updated",
+        detail: `${updated.edge_count} relationship(s) mapped across ${updated.node_count} documents.`,
+        tone: "info",
+        targetNav: "layers",
+      });
     } catch (err) {
       setUploadError(
         err instanceof Error ? err.message : "Failed to recompute graph."
@@ -1088,6 +1172,13 @@ export default function DashboardPage() {
     try {
       const res = await dashboardApi.generateQuiz(docId, 3);
       setQuizResult(res);
+      pushNotification({
+        title: "Quiz generated",
+        detail: `${res.questions.length} source-backed questions ready in Studio.`,
+        tone: "success",
+        targetNav: "studio",
+        docId,
+      });
     } catch (err) {
       setUploadError(
         err instanceof Error ? err.message : "Failed to generate quiz."
@@ -1102,6 +1193,13 @@ export default function DashboardPage() {
     try {
       const res = await dashboardApi.generateAudioBriefing(docId);
       setAudioResult(res);
+      pushNotification({
+        title: "Audio briefing ready",
+        detail: `${res.title} (${res.duration_estimate}) is ready to play in Studio.`,
+        tone: "success",
+        targetNav: "studio",
+        docId,
+      });
     } catch (err) {
       setUploadError(
         err instanceof Error ? err.message : "Failed to generate audio script."
@@ -1189,7 +1287,7 @@ export default function DashboardPage() {
     return <div className="db-viewport" />;
   }
 
-  if (authStatus === "checking" || !navRestored) {
+  if (authStatus === "checking" || !navRestored || !initialDocsLoaded) {
     const isGraphBoot =
       activeNavId === "layers" || activeNavId === "synthesis";
     return (
@@ -1278,6 +1376,7 @@ export default function DashboardPage() {
           }
           storageProgress={storageProgress}
           storageLabel={storageLabel}
+          notifications={notifications}
           signingOut={signingOut}
           onSelectNav={setActiveNavId}
           onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
@@ -1287,6 +1386,58 @@ export default function DashboardPage() {
           onCloseAvatarMenu={() => setAvatarActive(false)}
           onRefreshData={() => {
             void loadWorkspaceData();
+          }}
+          onSelectNotification={(item) => {
+            setNotifications((prev) => {
+              const next = prev.map((n) =>
+                n.id === item.id ? { ...n, read: true } : n
+              );
+              try {
+                if (user?.id) {
+                  window.localStorage.setItem(
+                    `documind:notifications:${user.id}`,
+                    JSON.stringify(next)
+                  );
+                }
+              } catch {
+                // ignore
+              }
+              return next;
+            });
+            if (item.docId) {
+              setSelectedDocId(item.docId);
+            }
+            if (item.targetNav) {
+              setActiveNavId(item.targetNav);
+            }
+          }}
+          onMarkAllNotificationsRead={() => {
+            setNotifications((prev) => {
+              const next = prev.map((n) => ({ ...n, read: true }));
+              try {
+                if (user?.id) {
+                  window.localStorage.setItem(
+                    `documind:notifications:${user.id}`,
+                    JSON.stringify(next)
+                  );
+                }
+              } catch {
+                // ignore
+              }
+              return next;
+            });
+          }}
+          onClearNotifications={() => {
+            setNotifications([]);
+            try {
+              if (user?.id) {
+                window.localStorage.removeItem(
+                  `documind:notifications:${user.id}`
+                );
+              }
+            } catch {
+              // ignore
+            }
           }}
           onSignOut={() => {
             setAvatarActive(false);

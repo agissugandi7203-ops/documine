@@ -61,11 +61,12 @@ import {
   Waypoints,
   X,
 } from "lucide-react";
-import type {
-  DocumentItem,
-  RelationshipEvidenceSummary,
-  RelationshipGraphEdge,
-  RelationshipGraphResponse,
+import {
+  dashboardApi,
+  type DocumentItem,
+  type RelationshipEvidenceSummary,
+  type RelationshipGraphEdge,
+  type RelationshipGraphResponse,
 } from "@/lib/dashboard-api";
 import type { DashboardSectionId } from "./types";
 import { GraphAIPanel, type GraphRightPanelTab } from "./GraphAIPanel";
@@ -1019,6 +1020,7 @@ function GraphCanvasInner({
 
   // Backend mutations & file drop
   const [recomputing, setRecomputing] = useState(false);
+  const [aiSyncedEdges, setAiSyncedEdges] = useState<RelationshipGraphEdge[] | null>(null);
   const [dismissingEdgeId, setDismissingEdgeId] = useState<string | null>(null);
   const [dismissedLocalIds, setDismissedLocalIds] = useState<string[]>([]);
   const [isDragOverFile, setIsDragOverFile] = useState(false);
@@ -1164,7 +1166,9 @@ function GraphCanvasInner({
 
   const rawCombinedEdges = useMemo<RelationshipGraphEdge[]>(() => {
     const validDocIds = new Set(effectiveDocs.map((d) => d.id));
-    const baseEdges = isShowingDemo ? DEMO_EDGES : relationships?.edges ?? [];
+    const baseEdges = isShowingDemo
+      ? DEMO_EDGES
+      : aiSyncedEdges ?? relationships?.edges ?? [];
 
     const filteredBase = baseEdges.filter(
       (e) =>
@@ -1198,6 +1202,7 @@ function GraphCanvasInner({
     relationships,
     manualEdges,
     dismissedLocalIds,
+    aiSyncedEdges,
     docById,
   ]);
 
@@ -1623,6 +1628,14 @@ function GraphCanvasInner({
       setRightPanelOpen(true);
       setRightPanelTab("detail");
       setStatusMessage("Nodes connected and aligned. Click Auto Tidy to arrange all.");
+      void dashboardApi
+        .createManualRelationshipLink({
+          source_doc_id: connection.source,
+          target_doc_id: connection.target,
+          relationship_type: "explicit_reference",
+          explanation: `Linked "${srcTitle}" with "${tgtTitle}" on workspace canvas.`,
+        })
+        .catch(() => {});
     },
     [
       docById,
@@ -1680,6 +1693,44 @@ function GraphCanvasInner({
     [rawCombinedEdges, manualStorageKey, isShowingDemo, onDismissRelationship]
   );
 
+  // Semantic AI Auto-Connect: analyzes content/chunks across canvas docs & draws edges live
+  const handleAiAutoConnect = useCallback(
+    async (focusPrompt?: string) => {
+      const targetIds =
+        selectedNodeIds.length >= 2
+          ? selectedNodeIds.filter((id) => docById[id])
+          : undefined;
+      const res = await dashboardApi.aiConnectRelationships({
+        document_ids: targetIds,
+        focus_prompt: focusPrompt,
+      });
+      if (Array.isArray(res.edges)) {
+        setAiSyncedEdges(res.edges);
+        setDismissedLocalIds([]);
+      }
+      if (res.discovered_count > 0) {
+        setStatusMessage(
+          `AI connected ${res.discovered_count} content-based relationship(s).`
+        );
+      } else {
+        setStatusMessage(res.summary || "Graph link analysis completed.");
+      }
+      return {
+        summary: res.summary,
+        discoveredCount: res.discovered_count,
+        links: (res.new_edges || []).map((e) => ({
+          sourceTitle:
+            e.source_doc_title || docById[e.source_doc_id]?.title || "Document A",
+          targetTitle:
+            e.target_doc_title || docById[e.target_doc_id]?.title || "Document B",
+          type: e.relationship_type || "composite_related",
+          explanation: e.explanation || "Related by content.",
+        })),
+      };
+    },
+    [selectedNodeIds, docById]
+  );
+
   // Recompute backend graph relationships
   const handleRecompute = useCallback(async () => {
     if (isShowingDemo) {
@@ -1690,6 +1741,7 @@ function GraphCanvasInner({
     setRecomputing(true);
     try {
       await onRecomputeRelationships();
+      setAiSyncedEdges(null);
       setDismissedLocalIds([]);
       setStatusMessage("Relationships recomputed from workspace documents.");
     } catch (err) {
@@ -2421,6 +2473,7 @@ function GraphCanvasInner({
           onChangeTab={setRightPanelTab}
           hasSelection={hasSelection}
           onFocusNode={focusNodeCamera}
+          onAiAutoConnect={handleAiAutoConnect}
           onClose={handleCloseRightPanel}
           detailContent={
             rightPanelTab !== "detail" ? null : (

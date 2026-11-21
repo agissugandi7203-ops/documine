@@ -4,26 +4,12 @@ import React, { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   AlertTriangle,
-  ArrowUpRight,
-  BookOpen,
-  Check,
-  CheckCircle2,
   Clock,
   FileText,
-  FolderOpen,
-  GitCompare,
   Globe,
-  Headphones,
   Layers,
-  MessageSquare,
-  Network,
-  Pencil,
-  Plus,
   RefreshCw,
-  Share2,
-  Trash2,
   Upload,
-  X,
 } from "lucide-react";
 import {
   type AnalyticsDashboardResponse,
@@ -36,6 +22,8 @@ import {
   type SearchMatch,
   type SynthesisResponse,
 } from "@/lib/dashboard-api";
+import { SynthesisWorkspacePanel } from "./SynthesisWorkspacePanel";
+import { StudioWorkspacePanel } from "./StudioWorkspacePanel";
 import {
   AnalyticsWorkspaceSkeleton,
   ChatWorkspaceSkeleton,
@@ -147,7 +135,7 @@ interface MainCanvasProps {
   onDeleteDoc: (docId: string) => void;
   onRefreshData: () => void;
   onGenerateWidget: (chartType: "bar" | "line" | "pie", prompt: string) => void;
-  onRunSynthesis: (docIds: string[]) => void;
+  onRunSynthesis: (docIds: string[], focusQuery?: string) => void;
   onRecomputeRelationships: () => void;
   onGenerateQuiz: (docId: string) => void;
   onGenerateAudio: (docId?: string) => void;
@@ -216,7 +204,6 @@ export function MainCanvas({
   const [isDragOver, setIsDragOver] = useState(false);
   const chartWindow: ChartWindow = "7d";
   const [selectedSynthIds, setSelectedSynthIds] = useState<string[]>([]);
-  const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
 
   // Interactive CRUD Table state
   const [localEntries, setLocalEntries] = useState<LocalCrudItem[]>([]);
@@ -726,221 +713,33 @@ export function MainCanvas({
         )}
 
         {activeNavId === "synthesis" && (
-          <div className="db-homes-split">
-            <div className="db-panel-box">
-              <div className="db-panel-box-head">
-                <div className="db-panel-box-title">
-                  Compare ({selectedSynthIds.length})
-                </div>
-                <button
-                  type="button"
-                  className="db-mini-pill-btn db-mini-pill-btn--accent"
-                  disabled={synthesisLoading || selectedSynthIds.length < 2}
-                  onClick={() => onRunSynthesis(selectedSynthIds)}
-                >
-                  <GitCompare size={12} />
-                  <span>{synthesisLoading ? "Running..." : "Compare"}</span>
-                </button>
-              </div>
-
-              {documents.length >= 2 ? (
-                <div className="db-synth-checklist">
-                  {documents.map((doc) => {
-                    const checked = selectedSynthIds.includes(doc.id);
-                    return (
-                      <button
-                        key={doc.id}
-                        type="button"
-                        className={`db-doc-row ${
-                          checked ? "db-doc-row--selected" : ""
-                        }`}
-                        onClick={() => toggleSynthDoc(doc.id)}
-                      >
-                        <CheckCircle2 size={14} />
-                        <span className="db-doc-row-title">{doc.title}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="db-empty-dash-box">
-                  <p>Upload at least 2 documents to compare insights side by side.</p>
-                  <button
-                    type="button"
-                    className="db-mini-pill-btn db-mini-pill-btn--accent"
-                    onClick={() => onTriggerUpload()}
-                  >
-                    <Upload size={12} />
-                    <span>Upload PDF</span>
-                  </button>
-                </div>
-              )}
-
-              {relationships && (
-                <div className="db-rel-footer">
-                  <span className="db-panel-box-sub">
-                    <Network size={12} /> {relationships.node_count} nodes ·{" "}
-                    {relationships.edge_count} edges
-                  </span>
-                  <button
-                    type="button"
-                    className="db-mini-pill-btn"
-                    onClick={onRecomputeRelationships}
-                  >
-                    Recompute
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="db-panel-box">
-              <div className="db-panel-box-head">
-                <div className="db-panel-box-title">
-                  {synthesisResult
-                    ? synthesisResult.synthesis_headline
-                    : "Matrix"}
-                </div>
-              </div>
-
-              {synthesisResult ? (
-                <div className="db-synth-results">
-                  <p className="db-inspector-summary">
-                    {synthesisResult.executive_summary}
-                  </p>
-                  {synthesisResult.matrix.map((row, idx) => (
-                    <div key={idx} className="db-synth-row">
-                      <div className="db-synth-row-title">
-                        <span>{row.concept}</span>
-                        {row.is_contradiction && (
-                          <span className="db-doc-status-chip">Conflict</span>
-                        )}
-                      </div>
-                      <p className="db-synth-row-analysis">
-                        {row.comparison_analysis}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="db-empty-dash-box">
-                  <p>Select 2 or more documents on the left, then click Compare.</p>
-                </div>
-              )}
-            </div>
-          </div>
+          <SynthesisWorkspacePanel
+            documents={documents}
+            selectedSynthIds={selectedSynthIds}
+            synthesisResult={synthesisResult}
+            synthesisLoading={synthesisLoading}
+            relationships={relationships}
+            onToggleDoc={toggleSynthDoc}
+            onRunSynthesis={onRunSynthesis}
+            onRecomputeRelationships={onRecomputeRelationships}
+            onTriggerUpload={() => onTriggerUpload()}
+            onOpenDocument={(docId) => onOpenSearchResultDoc(docId)}
+          />
         )}
 
         {activeNavId === "studio" && (
-          <div className="db-homes-split">
-            <div className="db-panel-box">
-              <div className="db-panel-box-head">
-                <div className="db-panel-box-title">Quiz</div>
-                <button
-                  type="button"
-                  className="db-mini-pill-btn db-mini-pill-btn--accent"
-                  disabled={!activeDoc || quizLoading}
-                  onClick={() => activeDoc && onGenerateQuiz(activeDoc.id)}
-                >
-                  <BookOpen size={12} />
-                  <span>{quizLoading ? "Generating..." : "Generate"}</span>
-                </button>
-              </div>
-
-              {quizResult ? (
-                <div className="db-quiz-list">
-                  {quizResult.questions.map((q) => {
-                    const picked = quizAnswers[q.question_id];
-                    return (
-                      <div key={q.question_id} className="db-quiz-card">
-                        <div className="db-quiz-q">{q.question_text}</div>
-                        <div className="db-quiz-opts">
-                          {q.options.map((opt) => (
-                            <button
-                              key={opt.label}
-                              type="button"
-                              className={`db-quiz-opt ${
-                                picked === opt.label
-                                  ? opt.label === q.correct_option
-                                    ? "db-quiz-opt--correct"
-                                    : "db-quiz-opt--wrong"
-                                  : ""
-                              }`}
-                              onClick={() =>
-                                setQuizAnswers((prev) => ({
-                                  ...prev,
-                                  [q.question_id]: opt.label,
-                                }))
-                              }
-                            >
-                              <strong>{opt.label}.</strong> {opt.text}
-                            </button>
-                          ))}
-                        </div>
-                        {picked && (
-                          <div className="db-quiz-proof">
-                            Page {q.source_page}: {q.explanation}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="db-empty-dash-box">
-                  <p>
-                    {activeDoc
-                      ? `Generate an interactive quiz from "${activeDoc.title}".`
-                      : "Upload your first document to generate an interactive quiz."}
-                  </p>
-                  {!activeDoc && (
-                    <button
-                      type="button"
-                      className="db-mini-pill-btn db-mini-pill-btn--accent"
-                      onClick={() => onTriggerUpload()}
-                    >
-                      <Upload size={12} />
-                      <span>Start Upload</span>
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="db-panel-box">
-              <div className="db-panel-box-head">
-                <div className="db-panel-box-title">Audio Briefing</div>
-                <button
-                  type="button"
-                  className="db-mini-pill-btn db-mini-pill-btn--accent"
-                  disabled={!activeDoc || audioLoading}
-                  onClick={() => onGenerateAudio(activeDoc?.id)}
-                >
-                  <Headphones size={12} />
-                  <span>{audioLoading ? "Writing..." : "Generate"}</span>
-                </button>
-              </div>
-
-              {audioResult ? (
-                <div className="db-audio-script">
-                  <div className="db-panel-box-sub">
-                    {audioResult.title} · {audioResult.duration_estimate}
-                  </div>
-                  {audioResult.script.map((turn, idx) => (
-                    <div key={idx} className="db-audio-turn">
-                      <span className="db-audio-speaker">{turn.speaker}:</span>{" "}
-                      <span>{turn.text}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="db-empty-dash-box">
-                  <p>
-                    Generate a 2-host audio briefing from your active document.
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
+          <StudioWorkspacePanel
+            documents={documents}
+            activeDoc={activeDoc}
+            quizResult={quizResult}
+            quizLoading={quizLoading}
+            audioResult={audioResult}
+            audioLoading={audioLoading}
+            onSelectDoc={onSelectDoc}
+            onGenerateQuiz={onGenerateQuiz}
+            onGenerateAudio={onGenerateAudio}
+            onTriggerUpload={() => onTriggerUpload()}
+          />
         )}
       </div>
     </section>

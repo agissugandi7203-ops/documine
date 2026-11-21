@@ -34,10 +34,12 @@ app.add_middleware(RateLimitMiddleware)
 safe_origins = [o for o in settings.cors_origins if o and o != "*"] or [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://documine-tzlh.vercel.app",
 ]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=safe_origins,
+    allow_origin_regex=r"^https://documine(-[a-z0-9-]+)?\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=[

@@ -197,6 +197,14 @@
     justify-content: center;
   }
 
+  .db-viewport .db-notif-count-badge {
+    display: none;
+  }
+
+  .db-viewport .db-synth-stance-grid {
+    grid-template-columns: 1fr;
+  }
+
   .db-viewport .db-profile-btn,
   .db-viewport .db-profile-btn--collapsed {
     padding: 2px;

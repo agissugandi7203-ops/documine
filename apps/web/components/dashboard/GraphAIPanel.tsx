@@ -57,6 +57,16 @@ interface GraphAIPanelProps {
   hasSelection: boolean;
   detailContent: React.ReactNode;
   onFocusNode: (docId: string) => void;
+  onAiAutoConnect?: (focusPrompt?: string) => Promise<{
+    summary: string;
+    discoveredCount: number;
+    links: Array<{
+      sourceTitle: string;
+      targetTitle: string;
+      type: string;
+      explanation: string;
+    }>;
+  }>;
   onClose: () => void;
 }
 
@@ -228,8 +238,10 @@ export const GraphAIPanel = memo(function GraphAIPanel({
   hasSelection,
   detailContent,
   onFocusNode,
+  onAiAutoConnect,
   onClose,
 }: GraphAIPanelProps) {
+  const [autoConnecting, setAutoConnecting] = useState(false);
   const [messages, setMessages] = useState<GraphAiMessage[]>([]);
   const [input, setInput] = useState("");
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
@@ -356,15 +368,19 @@ export const GraphAIPanel = memo(function GraphAIPanel({
     }
     if (activeScope.kind === "multi") {
       return [
+        "Connect these selected files based on their content",
         "Compare the main findings across the selected documents",
         "Are there any metric discrepancies or contradictions?",
       ];
     }
     return [
+      ...(onAiAutoConnect && !isDemoMode && documents.length >= 2
+        ? ["Analyze all files and auto-connect related documents"]
+        : []),
       "Summarize the overarching themes across this graph",
       "Which documents share the strongest evidentiary links?",
     ];
-  }, [activeScope.kind]);
+  }, [activeScope.kind, documents.length, isDemoMode, onAiAutoConnect]);
 
   const patchMsg = useCallback(
     (
@@ -409,7 +425,15 @@ export const GraphAIPanel = memo(function GraphAIPanel({
   const sendMessage = useCallback(
     async (rawText: string) => {
       const text = rawText.trim();
-      if (!text || isStreaming) return;
+      if (!text || isStreaming || autoConnecting) return;
+
+      const wantsAutoConnect =
+        Boolean(onAiAutoConnect) &&
+        !isDemoMode &&
+        documents.length >= 2 &&
+        /\b(connect|auto[- ]?connect|link files|link documents|auto[- ]?link|sambung|sambungin|hubungkan|kaitkan)\b/i.test(
+          text
+        );
 
       const history = messagesRef.current
         .filter((m) => m.status === "completed" && m.content.trim())
@@ -424,6 +448,59 @@ export const GraphAIPanel = memo(function GraphAIPanel({
       };
       const assistantId = makeId("ga");
       const startedAt = performance.now();
+
+      if (wantsAutoConnect && onAiAutoConnect) {
+        const pendingMsg: GraphAiMessage = {
+          id: assistantId,
+          role: "assistant",
+          content: "",
+          status: "streaming",
+          orbState: ORB_ACTIVITY_PRESETS.searching.state,
+          orbVariant: ORB_ACTIVITY_PRESETS.searching.variant,
+          statusLabel: "Analyzing document contents & wiring relationships...",
+          startedAt,
+          retryPrompt: text,
+        };
+        setMessages((prev) => [...prev, userMsg, pendingMsg]);
+        setInput("");
+        setAutoConnecting(true);
+        try {
+          const res = await onAiAutoConnect(text);
+          const linkLines = res.links
+            .map(
+              (l) =>
+                `- **${l.sourceTitle}** <-> **${l.targetTitle}** (${l.type.replace(
+                  /_/g,
+                  " "
+                )}): ${l.explanation}`
+            )
+            .join("\n");
+          const answerText =
+            res.discoveredCount > 0
+              ? `${res.summary}\n\n${linkLines}`
+              : `${res.summary}\n\nTry adding more documents or dragging any handle between nodes to manually link them.`;
+          patchMsg(assistantId, {
+            content: answerText,
+            status: "completed",
+            orbState: null,
+            statusLabel: null,
+            elapsedSec: Number(((performance.now() - startedAt) / 1000).toFixed(1)),
+          });
+        } catch (err) {
+          patchMsg(assistantId, {
+            status: "failed",
+            orbState: null,
+            statusLabel: null,
+            error:
+              err instanceof Error
+                ? err.message
+                : "Could not auto-connect files right now.",
+          });
+        } finally {
+          setAutoConnecting(false);
+        }
+        return;
+      }
       const hasRealDocs = !isDemoMode && documents.length > 0;
       const startOrb = hasRealDocs
         ? ORB_ACTIVITY_PRESETS.searching
@@ -576,11 +653,13 @@ export const GraphAIPanel = memo(function GraphAIPanel({
     },
     [
       activeScope,
+      autoConnecting,
       conversationId,
       documents.length,
       forceFlush,
       isDemoMode,
       isStreaming,
+      onAiAutoConnect,
       patchMsg,
       scheduleFlush,
       thinkingEnabled,
@@ -717,16 +796,31 @@ export const GraphAIPanel = memo(function GraphAIPanel({
               )}
               <span>{activeScope.label}</span>
             </div>
-            {activeScope.kind !== "all" && (
-              <button
-                type="button"
-                className="gc-ai-scope-reset"
-                onClick={() => setScopeOverrideAll(true)}
-                title="Query across all documents in the graph"
-              >
-                All Graph
-              </button>
-            )}
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              {onAiAutoConnect && !isDemoMode && documents.length >= 2 && (
+                <button
+                  type="button"
+                  className="gc-ai-scope-reset"
+                  disabled={autoConnecting || isStreaming}
+                  onClick={() =>
+                    void sendMessage("Analyze contents and connect related files")
+                  }
+                  title="Let AI read file contents and draw relationship links on the graph"
+                >
+                  {autoConnecting ? "Linking..." : "AI Auto-Link"}
+                </button>
+              )}
+              {activeScope.kind !== "all" && (
+                <button
+                  type="button"
+                  className="gc-ai-scope-reset"
+                  onClick={() => setScopeOverrideAll(true)}
+                  title="Query across all documents in the graph"
+                >
+                  All Graph
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Messages or Empty Prompt */}

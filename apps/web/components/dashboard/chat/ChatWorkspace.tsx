@@ -326,6 +326,7 @@ export function ChatWorkspace({
   const activeAssistantIdRef = useRef<string | null>(null);
   const bufferedDeltaRef = useRef("");
   const rafFlushRef = useRef(0);
+  const timeoutFlushRef = useRef(0);
   const streamStartRef = useRef(0);
   const streamedTextRef = useRef("");
   const messagesRef = useRef<StreamChatMessage[]>([]);
@@ -348,6 +349,7 @@ export function ChatWorkspace({
     return () => {
       abortControllerRef.current?.abort();
       if (rafFlushRef.current) cancelAnimationFrame(rafFlushRef.current);
+      if (timeoutFlushRef.current) window.clearTimeout(timeoutFlushRef.current);
     };
   }, []);
 
@@ -370,7 +372,14 @@ export function ChatWorkspace({
   );
 
   const flushBufferedDelta = useCallback(() => {
-    rafFlushRef.current = 0;
+    if (rafFlushRef.current) {
+      cancelAnimationFrame(rafFlushRef.current);
+      rafFlushRef.current = 0;
+    }
+    if (timeoutFlushRef.current) {
+      window.clearTimeout(timeoutFlushRef.current);
+      timeoutFlushRef.current = 0;
+    }
     const id = activeAssistantIdRef.current;
     const chunk = bufferedDeltaRef.current;
     if (!id || !chunk) return;
@@ -379,15 +388,19 @@ export function ChatWorkspace({
   }, [patchMessage]);
 
   const scheduleFlush = useCallback(() => {
-    if (rafFlushRef.current) return;
-    rafFlushRef.current = requestAnimationFrame(flushBufferedDelta);
+    if (typeof document !== "undefined" && document.hidden) {
+      flushBufferedDelta();
+      return;
+    }
+    if (!rafFlushRef.current) {
+      rafFlushRef.current = requestAnimationFrame(flushBufferedDelta);
+    }
+    if (!timeoutFlushRef.current) {
+      timeoutFlushRef.current = window.setTimeout(flushBufferedDelta, 60);
+    }
   }, [flushBufferedDelta]);
 
   const forceFlush = useCallback(() => {
-    if (rafFlushRef.current) {
-      cancelAnimationFrame(rafFlushRef.current);
-      rafFlushRef.current = 0;
-    }
     flushBufferedDelta();
   }, [flushBufferedDelta]);
 
@@ -631,6 +644,76 @@ export function ChatWorkspace({
             orbState: null,
             statusLabel: null,
           });
+        } else if (!streamedTextRef.current.trim()) {
+          // Automatic non-streaming recovery so a stalled SSE connection never leaves chat stuck
+          try {
+            patchMessage(finalId, {
+              status: "retrying",
+              stage: "reasoning",
+              orbState: ORB_ACTIVITY_PRESETS.retrying.state,
+              orbVariant: ORB_ACTIVITY_PRESETS.retrying.variant,
+              statusLabel: "Reconnecting response...",
+            });
+            const fallbackRes = await dashboardApi.queryChat({
+              message: text,
+              conversation_id: conversationId,
+              deep_analysis: thinkingEnabled,
+              conversation_history: history,
+              ...scopePayload,
+            });
+            if (controller.signal.aborted) {
+              patchMessage(finalId, {
+                status: "cancelled",
+                stage: null,
+                orbState: null,
+                statusLabel: null,
+              });
+            } else {
+              const elapsedSeconds =
+                (performance.now() - streamStartRef.current) / 1000;
+              const outputTokens = estimateTokens(fallbackRes.answer);
+              patchMessage(finalId, {
+                id: fallbackRes.message_id || finalId,
+                content: fallbackRes.answer,
+                citations: fallbackRes.citations || [],
+                suggestedFollowups: fallbackRes.suggested_followups || [],
+                status: "completed",
+                stage: null,
+                orbState: null,
+                statusLabel: null,
+                error: null,
+                metrics: {
+                  elapsedSeconds: Number(elapsedSeconds.toFixed(1)),
+                  outputTokens,
+                  throughput: Math.round(
+                    outputTokens / Math.max(elapsedSeconds, 0.1)
+                  ),
+                  modelUsed: fallbackRes.model_used,
+                  isDeepThinking: thinkingEnabled,
+                },
+              });
+              if (fallbackRes.conversation_id) {
+                setConversationId(fallbackRes.conversation_id);
+              }
+              if (fallbackRes.citations && fallbackRes.citations.length > 0) {
+                setActiveCitations(fallbackRes.citations);
+              }
+              void loadConversations();
+            }
+          } catch (fallbackErr) {
+            patchMessage(finalId, {
+              status: "failed",
+              stage: null,
+              orbState: null,
+              statusLabel: null,
+              error:
+                fallbackErr instanceof Error
+                  ? fallbackErr.message
+                  : err instanceof Error
+                  ? err.message
+                  : "Unable to reach DocuMind AI right now.",
+            });
+          }
         } else {
           patchMessage(finalId, {
             status: "failed",
@@ -640,7 +723,7 @@ export function ChatWorkspace({
             error:
               err instanceof Error
                 ? err.message
-                : "Unable to reach DocuMind AI right now.",
+                : "Stream interrupted partway. Click Retry to regenerate.",
           });
         }
       } finally {

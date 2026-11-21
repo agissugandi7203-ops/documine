@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  CheckCheck,
   ChevronUp,
   ExternalLink,
   HardDrive,
@@ -13,6 +14,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   RefreshCw,
+  Trash2,
   Upload,
 } from "lucide-react";
 import type { AuthUser } from "@/lib/supabase";
@@ -22,6 +24,7 @@ import {
   PRIMARY_NAV_ITEMS,
   SECONDARY_NAV_ITEMS,
   type DashboardSectionId,
+  type WorkspaceNotification,
 } from "./types";
 
 interface SidebarProps {
@@ -34,6 +37,7 @@ interface SidebarProps {
   readyDocs: number;
   storageProgress?: number;
   storageLabel?: string;
+  notifications?: WorkspaceNotification[];
   signingOut: boolean;
   onSelectNav: (id: DashboardSectionId) => void;
   onToggleCollapse: () => void;
@@ -42,6 +46,9 @@ interface SidebarProps {
   onAvatarClick: () => void;
   onCloseAvatarMenu: () => void;
   onRefreshData: () => void;
+  onSelectNotification?: (notification: WorkspaceNotification) => void;
+  onMarkAllNotificationsRead?: () => void;
+  onClearNotifications?: () => void;
   onSignOut: () => void;
 }
 
@@ -239,6 +246,7 @@ export function Sidebar({
   readyDocs,
   storageProgress = 0,
   storageLabel = "0.0 MB / 1024 MB",
+  notifications = [],
   signingOut,
   onSelectNav,
   onToggleCollapse,
@@ -247,6 +255,9 @@ export function Sidebar({
   onAvatarClick,
   onCloseAvatarMenu,
   onRefreshData,
+  onSelectNotification,
+  onMarkAllNotificationsRead,
+  onClearNotifications,
   onSignOut,
 }: SidebarProps) {
   const profileAnchorRef = useRef<HTMLDivElement>(null);
@@ -254,6 +265,7 @@ export function Sidebar({
   const [avatarFailed, setAvatarFailed] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
+  const unreadNotifCount = notifications.filter((n) => !n.read).length;
   const safeStoragePct = Math.max(0, Math.min(100, Math.round(storageProgress)));
   const storageFillWidth = safeStoragePct > 0 ? Math.max(6, safeStoragePct) : 0;
 
@@ -462,11 +474,14 @@ export function Sidebar({
                     strokeLinecap="round"
                   />
                 </svg>
-                <span className="db-notif-dot" />
+                {unreadNotifCount > 0 && <span className="db-notif-dot" />}
               </span>
               <span className="db-nav-item-label" aria-hidden={collapsed}>
                 Notifications
               </span>
+              {!collapsed && unreadNotifCount > 0 && (
+                <span className="db-notif-count-badge">{unreadNotifCount}</span>
+              )}
             </button>
 
             {notifOpen && (
@@ -476,18 +491,67 @@ export function Sidebar({
                 aria-label="Workspace notifications"
               >
                 <div className="db-notif-head">
-                  <span className="db-account-name">Notifications</span>
-                  <span className="db-kpi-pill">
-                    {totalDocs > 0 ? `${readyDocs} Ready` : "Getting Started"}
+                  <span className="db-account-name">
+                    Notifications{unreadNotifCount > 0 ? ` (${unreadNotifCount})` : ""}
                   </span>
+                  <div className="db-notif-head-actions">
+                    {unreadNotifCount > 0 && onMarkAllNotificationsRead && (
+                      <button
+                        type="button"
+                        className="db-notif-text-btn"
+                        title="Mark all as read"
+                        onClick={onMarkAllNotificationsRead}
+                      >
+                        <CheckCheck size={12} />
+                        <span>Read all</span>
+                      </button>
+                    )}
+                    {notifications.length > 0 && onClearNotifications && (
+                      <button
+                        type="button"
+                        className="db-notif-text-btn"
+                        title="Clear notifications"
+                        onClick={onClearNotifications}
+                      >
+                        <Trash2 size={11} />
+                      </button>
+                    )}
+                    {notifications.length === 0 && (
+                      <span className="db-kpi-pill">
+                        {totalDocs > 0 ? `${readyDocs} Ready` : "Idle"}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="db-account-divider" />
                 <div className="db-notif-list">
-                  {totalDocs === 0 ? (
+                  {notifications.length > 0 ? (
+                    notifications.slice(0, 8).map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`db-notif-item ${!item.read ? "is-unread" : ""}`}
+                        onClick={() => {
+                          setNotifOpen(false);
+                          onSelectNotification?.(item);
+                        }}
+                      >
+                        <span
+                          className={`db-notif-tone is-${item.tone}`}
+                          aria-hidden="true"
+                        />
+                        <div className="db-notif-item-body">
+                          <div className="db-notif-item-title">{item.title}</div>
+                          <div className="db-notif-item-detail">{item.detail}</div>
+                          <div className="db-notif-item-time">{item.timestamp}</div>
+                        </div>
+                      </button>
+                    ))
+                  ) : totalDocs === 0 ? (
                     <div className="db-notif-empty">
                       <p>
-                        You don&apos;t have any documents yet. Start your first
-                        document or open AI Chat.
+                        No activity alerts yet. Start by uploading a document or
+                        asking AI Chat.
                       </p>
                       <div className="db-notif-actions">
                         <button
@@ -499,7 +563,7 @@ export function Sidebar({
                           }}
                         >
                           <Upload size={11} />
-                          <span>Start First Doc</span>
+                          <span>Upload Doc</span>
                         </button>
                         <button
                           type="button"
@@ -517,8 +581,8 @@ export function Sidebar({
                   ) : (
                     <div className="db-notif-empty">
                       <p>
-                        {readyDocs} of {totalDocs} documents are ready across
-                        Chat, Analytics, and Synthesis.
+                        All caught up. {readyDocs} of {totalDocs} documents are
+                        indexed across Chat, Analytics, and Graph.
                       </p>
                       <div className="db-notif-actions">
                         <button

@@ -263,6 +263,7 @@ export interface SynthesisResponse {
     is_contradiction: boolean;
   }>;
   emergent_takeaways: string[];
+  citations?: ChatCitation[];
 }
 
 export interface RelationshipEvidenceSummary {
@@ -314,6 +315,29 @@ export interface AudioBriefingResponse {
     source_chunk_id?: string | null;
   }>;
   takeaway_summary: string;
+}
+
+export interface SynthesizedAudioTurn {
+  speaker: string;
+  voice: string;
+  text: string;
+  audio_base64?: string | null;
+  content_type?: string;
+  source_chunk_id?: string | null;
+}
+
+export interface AudioSynthesizeResponse {
+  model_used: string;
+  fallback_browser_tts: boolean;
+  segments: SynthesizedAudioTurn[];
+}
+
+export interface GraphAutoConnectResponse {
+  workspace_id: string;
+  summary: string;
+  discovered_count: number;
+  new_edges: RelationshipGraphEdge[];
+  edges: RelationshipGraphEdge[];
 }
 
 export interface ChatCitation {
@@ -732,12 +756,39 @@ export const dashboardApi = {
       `relationships/${encodeURIComponent(relationshipId)}/dismiss`,
       { method: "PATCH" }
     ),
-  compareSynthesis: (documentIds: string[]) =>
+  compareSynthesis: (documentIds: string[], focusQuery?: string) =>
     proxyFetch<SynthesisResponse>("synthesis/compare", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ document_ids: documentIds }),
+      body: JSON.stringify({
+        document_ids: documentIds,
+        ...(focusQuery?.trim() ? { focus_query: focusQuery.trim() } : {}),
+      }),
     }),
+  aiConnectRelationships: (payload?: {
+    document_ids?: string[];
+    focus_prompt?: string;
+  }) =>
+    proxyFetch<GraphAutoConnectResponse>("relationships/ai-connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {}),
+    }),
+  createManualRelationshipLink: (payload: {
+    source_doc_id: string;
+    target_doc_id: string;
+    relationship_type?: string;
+    explanation?: string;
+    confidence?: number;
+  }) =>
+    proxyFetch<{ status: string; edge: RelationshipGraphEdge }>(
+      "relationships/link",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }
+    ),
   generateQuiz: (documentId: string, numQuestions = 3) =>
     proxyFetch<QuizResponse>(
       `chat/quiz?document_id=${encodeURIComponent(
@@ -751,11 +802,26 @@ export const dashboardApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(documentId ? { document_id: documentId } : {}),
     }),
+  synthesizeAudio: (payload: {
+    document_id?: string;
+    title?: string;
+    script: Array<{
+      speaker: string;
+      text: string;
+      source_chunk_id?: string | null;
+    }>;
+  }) =>
+    proxyFetch<AudioSynthesizeResponse>("audio/synthesize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
   queryChat: (payload: {
     message: string;
     document_id?: string | null;
     document_ids?: string[];
     conversation_id?: string | null;
+    scope_mode?: "single_doc" | "multi_doc" | "repository";
     deep_analysis?: boolean;
     conversation_history?: Array<{ role: string; content: string }>;
   }) =>
@@ -873,12 +939,39 @@ export const dashboardApi = {
     };
 
     if (res.body && typeof res.body.getReader === "function") {
+      const IDLE_CHUNK_TIMEOUT_MS = 22_000;
       const reader = res.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let buffer = "";
+
+      const readNextChunk = async (): Promise<
+        ReadableStreamReadResult<Uint8Array>
+      > => {
+        let timerId: number | undefined;
+        try {
+          return await Promise.race([
+            reader.read(),
+            new Promise<never>((_, reject) => {
+              timerId = window.setTimeout(() => {
+                void reader.cancel().catch(() => {});
+                reject(
+                  new Error(
+                    "Stream timed out waiting for AI response. Retrying automatically..."
+                  )
+                );
+              }, IDLE_CHUNK_TIMEOUT_MS);
+            }),
+          ]);
+        } finally {
+          if (timerId !== undefined) {
+            window.clearTimeout(timerId);
+          }
+        }
+      };
+
       try {
         while (true) {
-          const { value, done } = await reader.read();
+          const { value, done } = await readNextChunk();
           if (done) break;
           buffer += decoder
             .decode(value, { stream: true })
