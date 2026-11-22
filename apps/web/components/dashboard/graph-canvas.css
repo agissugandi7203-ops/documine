@@ -1526,7 +1526,7 @@
   border-radius: 16px;
   background: var(--gc-surface-solid);
   border: 1px solid var(--gc-border);
-  box-shadow: var(--gc-shadow-sm);
+  box-shadow: none;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -1535,7 +1535,7 @@
 
 .gc-ai-composer:focus-within {
   border-color: var(--gc-border-strong);
-  box-shadow: 0 0 0 3px rgba(232, 90, 36, 0.1);
+  box-shadow: none;
 }
 
 .gc-ai-textarea {
