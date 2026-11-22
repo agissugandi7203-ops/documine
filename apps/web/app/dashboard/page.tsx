@@ -80,7 +80,19 @@ function validateClientFile(file: File): string | null {
 }
 
 function formatStageLabel(stage?: string): string {
-  if (!stage) return "Indexing document...";
+  if (!stage || stage === "queued") {
+    return "File saved · Starting AI background pipeline...";
+  }
+  const ocrPageMatch = stage.match(/stage_6_vision_ocr_page_(\d+)_of_(\d+)/i);
+  if (ocrPageMatch) {
+    return `Running Vision OCR on scanned page ${ocrPageMatch[1]} of ${ocrPageMatch[2]}...`;
+  }
+  const key = stage.toLowerCase();
+  if (key.includes("stage_3_5")) return "Reading PDF layout & page structure...";
+  if (key.includes("stage_6")) return "Running Vision OCR on scanned pages...";
+  if (key.includes("stage_7_8")) return "Extracting tables & semantic chunks...";
+  if (key.includes("stage_9_10")) return "Building vector embeddings for AI search...";
+  if (key.includes("stage_11")) return "Generating AI summary, KPIs & Graph links...";
   const clean = stage.replace(/_/g, " ").trim();
   return clean.charAt(0).toUpperCase() + clean.slice(1);
 }
@@ -588,9 +600,16 @@ export default function DashboardPage() {
             Math.floor((now - task.startedAt) / 1000)
           );
           const isSlow =
-            (task.status === "uploading" && elapsedSec >= 8) ||
-            (task.status === "processing" && elapsedSec >= 15);
-          return { ...task, elapsedSec, isSlow };
+            (task.status === "uploading" && elapsedSec >= 6) ||
+            (task.status === "processing" && elapsedSec >= 12);
+          const softCreepPct =
+            task.status === "processing" &&
+            elapsedSec > 0 &&
+            elapsedSec % 3 === 0 &&
+            task.progressPct < 94
+              ? task.progressPct + 1
+              : task.progressPct;
+          return { ...task, elapsedSec, isSlow, progressPct: softCreepPct };
         })
       );
     }, 1000);
@@ -739,15 +758,20 @@ export default function DashboardPage() {
         let uploaded = await dashboardApi.uploadDocumentWithProgress(file, {
           forceReplace: options?.forceReplace,
           onProgress: (pct) => {
+            const mappedUploadPct = Math.max(
+              4,
+              Math.min(24, Math.round((pct / 100) * 24))
+            );
             setUploadTasks((prev) =>
               prev.map((t) =>
                 t.localId === localId && t.status === "uploading"
                   ? {
                       ...t,
-                      progressPct: pct,
+                      progressPct: mappedUploadPct,
+                      stageKey: "uploading",
                       stageLabel:
                         pct >= 98
-                          ? "Finalizing upload..."
+                          ? "Saving file & handing off to AI pipeline..."
                           : `Uploading file (${pct}%)...`,
                     }
                   : t
@@ -809,15 +833,16 @@ export default function DashboardPage() {
                 ? {
                     ...t,
                     status: "processing",
-                    progressPct: Math.max(t.progressPct, 35),
-                    stageLabel: "Indexing into Repository...",
+                    progressPct: 28,
+                    stageKey: "queued",
+                    stageLabel: "File saved · Starting AI background pipeline...",
                     doc: uploaded,
                   }
                 : t
             )
           );
 
-          for (let attempt = 0; attempt < 90; attempt += 1) {
+          for (let attempt = 0; attempt < 150; attempt += 1) {
             await new Promise((r) => window.setTimeout(r, 900));
             try {
               const st = await dashboardApi.getDocumentStatus(uploaded.id);
@@ -871,12 +896,17 @@ export default function DashboardPage() {
                 });
                 return { filename: file.name, error: msg };
               }
+              const mappedAiPct = Math.max(
+                28,
+                Math.min(95, Math.round(28 + ((st.progress_pct || 20) / 100) * 67))
+              );
               setUploadTasks((prev) =>
                 prev.map((t) =>
                   t.localId === localId
                     ? {
                         ...t,
-                        progressPct: Math.max(35, st.progress_pct || 45),
+                        progressPct: Math.max(t.progressPct, mappedAiPct),
+                        stageKey: st.current_stage,
                         stageLabel: formatStageLabel(st.current_stage),
                       }
                     : t

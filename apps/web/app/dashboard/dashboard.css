@@ -5373,6 +5373,76 @@
   background: #e85a24;
 }
 
+.db-upload-phase-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  margin-right: 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  background: #efede6;
+  color: #3f3d37;
+}
+
+.db-upload-phase-badge.is-upload {
+  background: #eaeff8;
+  color: #1d4ed8;
+}
+
+.db-upload-phase-badge.is-ai {
+  background: #faece5;
+  color: #c2410c;
+}
+
+.db-upload-phase-badge.is-done {
+  background: #e3efe9;
+  color: #1f5c49;
+}
+
+.db-upload-stepper {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.db-upload-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #9b978d;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.db-upload-step-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #d8d4ca;
+  flex-shrink: 0;
+}
+
+.db-upload-step.is-done {
+  color: #1f5c49;
+}
+
+.db-upload-step.is-done .db-upload-step-dot {
+  background: #2c6b58;
+}
+
+.db-upload-step.is-active {
+  color: #c2410c;
+}
+
+.db-upload-step.is-active .db-upload-step-dot {
+  background: #e85a24;
+}
+
 .db-upload-task-error {
   margin: 0;
   font-size: 11px;

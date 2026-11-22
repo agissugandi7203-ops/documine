@@ -31,6 +31,7 @@ export interface UploadTaskItem {
   sizeBytes: number;
   progressPct: number;
   stageLabel: string;
+  stageKey?: string;
   status: UploadTaskStatus;
   startedAt: number;
   elapsedSec: number;
@@ -39,6 +40,27 @@ export interface UploadTaskItem {
   errorMessage?: string;
   targetFolder?: string;
   sourceFile?: File;
+}
+
+const PIPELINE_STEPS = [
+  { id: "upload", label: "Upload File" },
+  { id: "extract", label: "Read & OCR" },
+  { id: "index", label: "Vector Index" },
+  { id: "insights", label: "AI Insights" },
+] as const;
+
+function resolveActiveStepIndex(task: UploadTaskItem): number {
+  if (task.status === "ready") return 4;
+  if (task.status === "uploading") return 0;
+  const key = (task.stageKey || "").toLowerCase();
+  if (key.includes("stage_11")) return 3;
+  if (key.includes("stage_9") || key.includes("stage_7") || key.includes("embed") || key.includes("chunk")) {
+    return 2;
+  }
+  if (key.includes("stage_3") || key.includes("stage_6") || key.includes("ocr") || key.includes("layout")) {
+    return 1;
+  }
+  return task.progressPct >= 80 ? 3 : task.progressPct >= 50 ? 2 : 1;
 }
 
 function formatFileSize(bytes: number): string {
@@ -197,9 +219,10 @@ export function UploadModalDialog({
           <div className="db-dialog-advisory" role="status">
             <Clock size={14} />
             <div>
-              <strong>Taking longer than expected.</strong> Large multi-page
-              PDFs or heavy table/OCR extraction take a bit more time. You can
-              wait here or minimize to keep working while indexing completes.
+              <strong>AI background pipeline is still working.</strong> Your
+              file transfer finishes first, followed by page extraction, Vision
+              OCR (for scans), vector embeddings, and AI summary generation. You
+              can keep working while indexing completes.
             </div>
           </div>
         )}
@@ -228,11 +251,32 @@ export function UploadModalDialog({
                         {task.filename}
                       </span>
                       <span className="db-upload-task-sub">
+                        <span
+                          className={`db-upload-phase-badge ${
+                            task.status === "uploading"
+                              ? "is-upload"
+                              : task.status === "processing"
+                              ? "is-ai"
+                              : task.status === "ready"
+                              ? "is-done"
+                              : ""
+                          }`}
+                        >
+                          {task.status === "uploading"
+                            ? "Step 1 · File Upload"
+                            : task.status === "processing"
+                            ? "Step 2 · AI Background"
+                            : task.status === "ready"
+                            ? "Ready"
+                            : task.status === "duplicate"
+                            ? "Duplicate"
+                            : "Failed"}
+                        </span>
                         {task.sizeBytes > 0 ? `${formatFileSize(task.sizeBytes)} · ` : ""}
                         {task.stageLabel}
                         {(task.status === "uploading" ||
                           task.status === "processing") &&
-                          ` · ${task.elapsedSec}s`}
+                          ` · ${task.progressPct}% · ${task.elapsedSec}s`}
                       </span>
                     </div>
                   </div>
@@ -308,16 +352,36 @@ export function UploadModalDialog({
 
                 {(task.status === "uploading" ||
                   task.status === "processing") && (
-                  <div className="db-upload-progress-track">
-                    <div
-                      className={`db-upload-progress-fill ${
-                        task.isSlow ? "is-slow" : ""
-                      }`}
-                      style={{
-                        width: `${Math.max(8, Math.min(100, task.progressPct))}%`,
-                      }}
-                    />
-                  </div>
+                  <>
+                    <div className="db-upload-progress-track">
+                      <div
+                        className={`db-upload-progress-fill ${
+                          task.isSlow ? "is-slow" : ""
+                        }`}
+                        style={{
+                          width: `${Math.max(6, Math.min(100, task.progressPct))}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="db-upload-stepper" aria-label="Document pipeline progress">
+                      {PIPELINE_STEPS.map((step, stepIdx) => {
+                        const activeIdx = resolveActiveStepIndex(task);
+                        const isDone = stepIdx < activeIdx;
+                        const isCurrent = stepIdx === activeIdx;
+                        return (
+                          <span
+                            key={step.id}
+                            className={`db-upload-step ${
+                              isDone ? "is-done" : isCurrent ? "is-active" : ""
+                            }`}
+                          >
+                            <span className="db-upload-step-dot" aria-hidden="true" />
+                            <span>{step.label}</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </>
                 )}
 
                 {task.status === "error" && task.errorMessage && (
@@ -413,8 +477,12 @@ export function FloatingUploadTracker({
         <span className="db-floating-upload-text">
           {isBusy
             ? active.length > 1
-              ? `Indexing ${active.length} files (${latest.progressPct}%)`
-              : `${latest.filename} · ${latest.progressPct}%`
+              ? `${
+                  active[0].status === "uploading" ? "Uploading" : "AI indexing"
+                } ${active.length} files (${latest.progressPct}% · ${latest.elapsedSec}s)`
+              : `${
+                  latest.status === "uploading" ? "Uploading" : "AI indexing"
+                } ${latest.filename} · ${latest.progressPct}% · ${latest.elapsedSec}s`
             : hasError
             ? `Upload issue on ${latest.filename}, click to retry`
             : `${tasks.length} ${
