@@ -762,19 +762,28 @@ export function SignOutConfirmDialog({
    ============================================================================ */
 
 interface FolderDialogProps {
-  mode: "create-folder" | "edit-doc" | null;
+  mode: "create-folder" | "rename-folder" | "edit-doc" | null;
   initialName?: string;
   initialFolder?: string;
+  initialTags?: string;
+  initialSummary?: string;
   availableFolders: string[];
   busy?: boolean;
   onCancel: () => void;
-  onSubmit: (payload: { name: string; folder: string }) => void;
+  onSubmit: (payload: {
+    name: string;
+    folder: string;
+    tags: string[];
+    summary: string;
+  }) => void;
 }
 
 export function RepositoryItemDialog({
   mode,
   initialName = "",
   initialFolder = "General",
+  initialTags = "",
+  initialSummary = "",
   availableFolders,
   busy = false,
   onCancel,
@@ -782,11 +791,15 @@ export function RepositoryItemDialog({
 }: FolderDialogProps) {
   const [name, setName] = useState(initialName);
   const [folder, setFolder] = useState(initialFolder);
+  const [tagsRaw, setTagsRaw] = useState(initialTags);
+  const [summaryText, setSummaryText] = useState(initialSummary);
 
   useEffect(() => {
     setName(initialName);
     setFolder(initialFolder);
-  }, [mode, initialName, initialFolder]);
+    setTagsRaw(initialTags);
+    setSummaryText(initialSummary);
+  }, [mode, initialName, initialFolder, initialTags, initialSummary]);
 
   useEffect(() => {
     if (!mode) return;
@@ -799,7 +812,7 @@ export function RepositoryItemDialog({
 
   if (!mode) return null;
 
-  const isFolder = mode === "create-folder";
+  const isFolderMode = mode === "create-folder" || mode === "rename-folder";
 
   return (
     <div
@@ -817,22 +830,37 @@ export function RepositoryItemDialog({
           e.preventDefault();
           const cleanName = name.trim();
           if (!cleanName) return;
-          onSubmit({ name: cleanName, folder: folder.trim() || "General" });
+          const parsedTags = tagsRaw
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean);
+          onSubmit({
+            name: cleanName,
+            folder: folder.trim() || "General",
+            tags: parsedTags,
+            summary: summaryText.trim(),
+          });
         }}
       >
         <div className="db-dialog-head">
           <div className="db-dialog-head-left">
             <span className="db-dialog-icon db-dialog-icon--accent">
-              {isFolder ? <FolderPlus size={16} /> : <FileText size={16} />}
+              {isFolderMode ? <FolderPlus size={16} /> : <FileText size={16} />}
             </span>
             <div>
               <h2 id="db-repo-item-dialog-title" className="db-dialog-title">
-                {isFolder ? "New Repository Folder" : "Rename or Move Document"}
+                {mode === "create-folder"
+                  ? "New Repository Folder"
+                  : mode === "rename-folder"
+                  ? "Rename Folder"
+                  : "Edit Document Details"}
               </h2>
               <p className="db-dialog-subtitle">
-                {isFolder
+                {mode === "create-folder"
                   ? "Organize workspace PDFs and datasets inside Explorer."
-                  : "Update file title or move into another folder."}
+                  : mode === "rename-folder"
+                  ? "Rename this folder and move its assigned documents automatically."
+                  : "Edit document title, target folder, tags, or executive summary."}
               </p>
             </div>
           </div>
@@ -849,34 +877,59 @@ export function RepositoryItemDialog({
 
         <div className="db-dialog-form-fields">
           <label className="db-dialog-field">
-            <span>{isFolder ? "Folder Name" : "Document Title"}</span>
+            <span>{isFolderMode ? "Folder Name" : "Document Title"}</span>
             <input
               type="text"
               className="db-dialog-input"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={isFolder ? "e.g., Q4 Reports" : "Document title..."}
+              placeholder={isFolderMode ? "e.g., Q4 Reports" : "Document title..."}
               autoFocus
             />
           </label>
 
-          {!isFolder && (
-            <label className="db-dialog-field">
-              <span>Target Folder</span>
-              <select
-                className="db-dialog-input"
-                value={folder}
-                onChange={(e) => setFolder(e.target.value)}
-              >
-                {Array.from(new Set(["General", ...availableFolders, folder]))
-                  .filter(Boolean)
-                  .map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
-              </select>
-            </label>
+          {!isFolderMode && (
+            <>
+              <label className="db-dialog-field">
+                <span>Target Folder / Category</span>
+                <select
+                  className="db-dialog-input"
+                  value={folder}
+                  onChange={(e) => setFolder(e.target.value)}
+                >
+                  {Array.from(new Set(["General", ...availableFolders, folder]))
+                    .filter(Boolean)
+                    .map((f) => (
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
+                    ))}
+                </select>
+              </label>
+
+              <label className="db-dialog-field">
+                <span>Tags (comma-separated)</span>
+                <input
+                  type="text"
+                  className="db-dialog-input"
+                  value={tagsRaw}
+                  onChange={(e) => setTagsRaw(e.target.value)}
+                  placeholder="e.g., rag, governance, waicy-2026"
+                />
+              </label>
+
+              <label className="db-dialog-field">
+                <span>Document Summary</span>
+                <textarea
+                  className="db-dialog-input"
+                  rows={3}
+                  style={{ height: "auto", padding: "9px 12px", resize: "vertical" }}
+                  value={summaryText}
+                  onChange={(e) => setSummaryText(e.target.value)}
+                  placeholder="Executive summary of this document..."
+                />
+              </label>
+            </>
           )}
         </div>
 
@@ -900,7 +953,13 @@ export function RepositoryItemDialog({
                 <span>Saving...</span>
               </>
             ) : (
-              <span>{isFolder ? "Create Folder" : "Save Changes"}</span>
+              <span>
+                {mode === "create-folder"
+                  ? "Create Folder"
+                  : mode === "rename-folder"
+                  ? "Rename Folder"
+                  : "Save Changes"}
+              </span>
             )}
           </button>
         </div>

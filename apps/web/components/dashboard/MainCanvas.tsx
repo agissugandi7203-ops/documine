@@ -128,7 +128,12 @@ interface MainCanvasProps {
   onRequestDeleteDoc: (doc: DocumentItem) => void;
   onUpdateDocumentMeta: (
     docId: string,
-    payload: { title?: string; category?: string }
+    payload: {
+      title?: string;
+      category?: string;
+      summary?: string;
+      user_tags?: string[];
+    }
   ) => Promise<void>;
   onFocusSearch?: () => void;
   onDropFile: (file: File) => void;

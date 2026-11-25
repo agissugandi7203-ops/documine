@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Check,
   ChevronDown,
   ChevronRight,
   Download,
@@ -62,7 +63,12 @@ interface RepositoryIdeWorkspaceProps {
   onRequestDeleteDoc: (doc: DocumentItem) => void;
   onUpdateDocumentMeta: (
     docId: string,
-    payload: { title?: string; category?: string }
+    payload: {
+      title?: string;
+      category?: string;
+      summary?: string;
+      user_tags?: string[];
+    }
   ) => Promise<void>;
   onRefreshDocuments: () => void;
 }
@@ -187,12 +193,18 @@ export function RepositoryIdeWorkspace({
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
   const [draggedDocId, setDraggedDocId] = useState<string | null>(null);
 
-  // Dialogs for New Folder & Rename/Move File
+  // Dialogs for New Folder, Rename Folder & Edit Document
   const [itemDialogMode, setItemDialogMode] = useState<
-    "create-folder" | "edit-doc" | null
+    "create-folder" | "rename-folder" | "edit-doc" | null
   >(null);
   const [editingDoc, setEditingDoc] = useState<DocumentItem | null>(null);
+  const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
   const [dialogSaving, setDialogSaving] = useState(false);
+
+  // Inline passage text editing inside Repository Text view
+  const [editingChunkId, setEditingChunkId] = useState<string | null>(null);
+  const [editingChunkText, setEditingChunkText] = useState("");
+  const [savingChunk, setSavingChunk] = useState(false);
 
   // Open file in right editor/viewer (null = Default AI Chat mode)
   const ideShellRef = useRef<HTMLDivElement | null>(null);
@@ -1113,19 +1125,79 @@ export function RepositoryIdeWorkspace({
                     <span className="repo-folder-count">{files.length}</span>
                   </button>
 
-                  <button
-                    type="button"
-                    className="repo-row-hover-btn"
-                    title={`Upload into ${folderName}`}
-                    aria-label={`Upload into ${folderName}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveFolder(folderName);
-                      onOpenUploadModal(folderName);
-                    }}
-                  >
-                    <Upload size={11} />
-                  </button>
+                  <div className="repo-file-row-actions">
+                    <button
+                      type="button"
+                      className="repo-row-hover-btn"
+                      title={`Upload into ${folderName}`}
+                      aria-label={`Upload into ${folderName}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveFolder(folderName);
+                        onOpenUploadModal(folderName);
+                      }}
+                    >
+                      <Upload size={11} />
+                    </button>
+                    {folderName !== "General" && (
+                      <>
+                        <button
+                          type="button"
+                          className="repo-row-hover-btn"
+                          title={`Rename folder ${folderName}`}
+                          aria-label={`Rename folder ${folderName}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRenamingFolder(folderName);
+                            setEditingDoc(null);
+                            setItemDialogMode("rename-folder");
+                          }}
+                        >
+                          <Pencil size={11} />
+                        </button>
+                        <button
+                          type="button"
+                          className="repo-row-hover-btn is-danger"
+                          title={`Remove folder ${folderName} (files move to General)`}
+                          aria-label={`Remove folder ${folderName}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const nextFolders = customFolders.filter(
+                              (f) => f !== folderName
+                            );
+                            persistFolders(
+                              nextFolders.length > 0 ? nextFolders : ["General"]
+                            );
+                            setLocalFolderMap((prev) => {
+                              const next = { ...prev };
+                              for (const d of files) {
+                                next[d.id] = "General";
+                              }
+                              try {
+                                window.localStorage.setItem(
+                                  mapStorageKey,
+                                  JSON.stringify(next)
+                                );
+                              } catch {
+                                // ignore
+                              }
+                              return next;
+                            });
+                            for (const d of files) {
+                              void onUpdateDocumentMeta(d.id, {
+                                category: "General",
+                              });
+                            }
+                            if (activeFolder === folderName) {
+                              setActiveFolder("General");
+                            }
+                          }}
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 {isExpanded && (
@@ -1602,6 +1674,19 @@ export function RepositoryIdeWorkspace({
                   </button>
                 </div>
 
+                <button
+                  type="button"
+                  className="repo-editor-link-btn"
+                  title="Edit document title, folder, tags & summary"
+                  aria-label="Edit document details"
+                  onClick={() => {
+                    setEditingDoc(openDoc);
+                    setRenamingFolder(null);
+                    setItemDialogMode("edit-doc");
+                  }}
+                >
+                  <Pencil size={13} />
+                </button>
                 <a
                   href={`/api/proxy/documents/${encodeURIComponent(
                     openDoc.id
@@ -1715,14 +1800,113 @@ export function RepositoryIdeWorkspace({
                       <span>Loading extracted text passages...</span>
                     </div>
                   ) : docChunks.length > 0 ? (
-                    docChunks.map((ch) => (
-                      <div key={ch.id} className="repo-chunk-block">
-                        <span className="repo-chunk-page">
-                          Page {ch.page_number} · Chunk #{ch.chunk_index + 1}
-                        </span>
-                        <p>{ch.text_content || ch.content}</p>
-                      </div>
-                    ))
+                    docChunks.map((ch) => {
+                      const chunkText = ch.text_content || ch.content || "";
+                      const isEditingThis = editingChunkId === ch.id;
+                      return (
+                        <div key={ch.id} className="repo-chunk-block">
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: "8px",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            <span className="repo-chunk-page" style={{ margin: 0 }}>
+                              Page {ch.page_number} · Chunk #{ch.chunk_index + 1}
+                            </span>
+                            {isEditingThis ? (
+                              <div style={{ display: "inline-flex", gap: "6px" }}>
+                                <button
+                                  type="button"
+                                  className="db-mini-pill-btn db-mini-pill-btn--accent"
+                                  disabled={savingChunk || !editingChunkText.trim()}
+                                  onClick={async () => {
+                                    if (!openDoc) return;
+                                    setSavingChunk(true);
+                                    try {
+                                      const updated =
+                                        await dashboardApi.updateDocumentChunk(
+                                          openDoc.id,
+                                          ch.id,
+                                          editingChunkText.trim()
+                                        );
+                                      setDocChunks((prev) =>
+                                        prev.map((item) =>
+                                          item.id === ch.id
+                                            ? {
+                                                ...item,
+                                                content:
+                                                  updated.text_content ||
+                                                  updated.content ||
+                                                  editingChunkText.trim(),
+                                                text_content:
+                                                  updated.text_content ||
+                                                  updated.content ||
+                                                  editingChunkText.trim(),
+                                              }
+                                            : item
+                                        )
+                                      );
+                                      setEditingChunkId(null);
+                                    } finally {
+                                      setSavingChunk(false);
+                                    }
+                                  }}
+                                >
+                                  {savingChunk ? (
+                                    <Loader2 size={11} className="db-spin" />
+                                  ) : (
+                                    <Check size={11} />
+                                  )}
+                                  <span>Save</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className="db-mini-pill-btn"
+                                  disabled={savingChunk}
+                                  onClick={() => setEditingChunkId(null)}
+                                >
+                                  <X size={11} />
+                                  <span>Cancel</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                className="db-mini-pill-btn"
+                                onClick={() => {
+                                  setEditingChunkId(ch.id);
+                                  setEditingChunkText(chunkText);
+                                }}
+                              >
+                                <Pencil size={11} />
+                                <span>Edit Text</span>
+                              </button>
+                            )}
+                          </div>
+                          {isEditingThis ? (
+                            <textarea
+                              className="db-dialog-input"
+                              rows={6}
+                              style={{
+                                width: "100%",
+                                height: "auto",
+                                padding: "10px 12px",
+                                lineHeight: 1.55,
+                                resize: "vertical",
+                              }}
+                              value={editingChunkText}
+                              onChange={(e) => setEditingChunkText(e.target.value)}
+                            />
+                          ) : (
+                            <p>{chunkText}</p>
+                          )}
+                        </div>
+                      );
+                    })
                   ) : (
                     <div className="repo-viewer-loading">
                       <span>No text chunks extracted yet for this document.</span>
@@ -1732,7 +1916,29 @@ export function RepositoryIdeWorkspace({
               ) : (
                 <div className="repo-info-scroll">
                   <div className="repo-info-summary-box">
-                    <h4>Document Summary</h4>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "8px",
+                        marginBottom: "6px",
+                      }}
+                    >
+                      <h4 style={{ margin: 0 }}>Document Summary</h4>
+                      <button
+                        type="button"
+                        className="db-mini-pill-btn"
+                        onClick={() => {
+                          setEditingDoc(openDoc);
+                          setRenamingFolder(null);
+                          setItemDialogMode("edit-doc");
+                        }}
+                      >
+                        <Pencil size={11} />
+                        <span>Edit Details</span>
+                      </button>
+                    </div>
                     <p>
                       {docDetail?.summary ||
                         openDoc.summary ||
@@ -1961,11 +2167,15 @@ export function RepositoryIdeWorkspace({
         )}
       </section>
 
-      {/* Clean Modal for New Folder & Rename/Move File */}
+      {/* Clean Modal for New Folder, Rename Folder & Edit Document Details */}
       <RepositoryItemDialog
         mode={itemDialogMode}
         initialName={
-          itemDialogMode === "edit-doc" && editingDoc ? editingDoc.title : ""
+          itemDialogMode === "edit-doc" && editingDoc
+            ? editingDoc.title
+            : itemDialogMode === "rename-folder" && renamingFolder
+            ? renamingFolder
+            : ""
         }
         initialFolder={
           itemDialogMode === "edit-doc" && editingDoc
@@ -1973,13 +2183,26 @@ export function RepositoryIdeWorkspace({
               normalizeFolderName(editingDoc.category)
             : activeFolder
         }
+        initialTags={
+          itemDialogMode === "edit-doc" && editingDoc
+            ? (editingDoc.user_tags || []).join(", ")
+            : ""
+        }
+        initialSummary={
+          itemDialogMode === "edit-doc" && editingDoc
+            ? (openDoc?.id === editingDoc.id && docDetail?.summary) ||
+              editingDoc.summary ||
+              ""
+            : ""
+        }
         availableFolders={allFolderNames}
         busy={dialogSaving}
         onCancel={() => {
           setItemDialogMode(null);
           setEditingDoc(null);
+          setRenamingFolder(null);
         }}
-        onSubmit={async ({ name, folder }) => {
+        onSubmit={async ({ name, folder, tags, summary }) => {
           setDialogSaving(true);
           try {
             if (itemDialogMode === "create-folder") {
@@ -1988,17 +2211,52 @@ export function RepositoryIdeWorkspace({
               }
               setExpandedFolders((prev) => ({ ...prev, [name]: true }));
               setActiveFolder(name);
+            } else if (itemDialogMode === "rename-folder" && renamingFolder) {
+              const targetEntry = folderTree.find(([fn]) => fn === renamingFolder);
+              const folderDocs = targetEntry ? targetEntry[1] : [];
+              const nextList = customFolders.map((f) =>
+                f === renamingFolder ? name : f
+              );
+              if (!nextList.includes(name)) nextList.push(name);
+              persistFolders(Array.from(new Set(nextList)));
+              setExpandedFolders((prev) => ({ ...prev, [name]: true }));
+              setActiveFolder(name);
+              setLocalFolderMap((prev) => {
+                const next = { ...prev };
+                for (const d of folderDocs) {
+                  next[d.id] = name;
+                }
+                try {
+                  window.localStorage.setItem(mapStorageKey, JSON.stringify(next));
+                } catch {
+                  // ignore
+                }
+                return next;
+              });
+              await Promise.all(
+                folderDocs.map((d) =>
+                  onUpdateDocumentMeta(d.id, { category: name })
+                )
+              );
             } else if (itemDialogMode === "edit-doc" && editingDoc) {
               await onUpdateDocumentMeta(editingDoc.id, {
                 title: name,
                 category: folder,
+                summary,
+                user_tags: tags,
               });
+              if (openDoc?.id === editingDoc.id) {
+                setDocDetail((prev) =>
+                  prev ? { ...prev, title: name, summary } : prev
+                );
+              }
               await assignDocFolder(editingDoc.id, folder);
             }
           } finally {
             setDialogSaving(false);
             setItemDialogMode(null);
             setEditingDoc(null);
+            setRenamingFolder(null);
           }
         }}
       />

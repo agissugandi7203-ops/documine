@@ -711,13 +711,28 @@ export const dashboardApi = {
     proxyFetch<DocumentChunkItem[]>(`documents/${encodeURIComponent(id)}/chunks`),
   updateDocument: (
     id: string,
-    payload: { title?: string; category?: string; user_tags?: string[] }
+    payload: {
+      title?: string;
+      category?: string;
+      summary?: string;
+      primary_domain?: string;
+      user_tags?: string[];
+    }
   ) =>
     proxyFetch<DocumentItem>(`documents/${encodeURIComponent(id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     }),
+  updateDocumentChunk: (docId: string, chunkId: string, textContent: string) =>
+    proxyFetch<DocumentChunkItem>(
+      `documents/${encodeURIComponent(docId)}/chunks/${encodeURIComponent(chunkId)}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text_content: textContent }),
+      }
+    ),
   fetchDocumentText: async (id: string): Promise<string> => {
     const res = await fetch(`/api/proxy/documents/${encodeURIComponent(id)}/file`, {
       credentials: "include",

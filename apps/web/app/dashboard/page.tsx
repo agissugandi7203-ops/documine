@@ -1174,7 +1174,12 @@ export default function DashboardPage() {
   const handleUpdateDocumentMeta = useCallback(
     async (
       docId: string,
-      payload: { title?: string; category?: string }
+      payload: {
+        title?: string;
+        category?: string;
+        summary?: string;
+        user_tags?: string[];
+      }
     ) => {
       try {
         await dashboardApi.updateDocument(docId, payload);
