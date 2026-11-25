@@ -137,8 +137,8 @@ interface MainCanvasProps {
   onGenerateWidget: (chartType: "bar" | "line" | "pie", prompt: string) => void;
   onRunSynthesis: (docIds: string[], focusQuery?: string) => void;
   onRecomputeRelationships: () => void;
-  onGenerateQuiz: (docId: string) => void;
-  onGenerateAudio: (docId?: string) => void;
+  onGenerateQuiz: (docId: string, numQuestions?: number) => void;
+  onGenerateAudio: (docId?: string, style?: string) => void;
   onDropPreviewCardOnCanvas: (previewIndex: number) => void;
 }
 

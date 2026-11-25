@@ -32,10 +32,10 @@
   .db-viewport .db-frame-cavity {
     height: auto;
     min-height: 100dvh;
-    padding: 18px 16px calc(104px + env(safe-area-inset-bottom));
+    padding: 18px 16px calc(112px + env(safe-area-inset-bottom));
     flex-direction: column;
     align-items: stretch;
-    gap: 16px;
+    gap: 20px;
   }
 
   /* Visual order on mobile: Top Bar -> Compact Search -> Main Stage */
@@ -1062,6 +1062,52 @@
 
   .db-viewport .db-quiz-opts {
     grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .db-viewport .db-studio-wrap {
+    gap: 18px;
+    padding: 2px 0 24px;
+  }
+
+  .db-viewport .db-studio-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .db-viewport .db-panel-box {
+    padding: 18px;
+    gap: 14px;
+  }
+
+  .db-viewport .db-studio-card-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .db-viewport .db-studio-head-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .db-viewport .db-quiz-stage-card {
+    padding: 15px 14px;
+  }
+
+  .db-viewport .db-quiz-score-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .db-viewport .db-quiz-summary-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .db-viewport .db-story-chip {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 120px;
   }
 
   .db-viewport .db-asset-empty-card {

@@ -30,6 +30,8 @@ build/
 # Local Uploads & Runtime Artifacts
 uploads/
 apps/api/uploads/
+apps/api/.local_uploads/
+demo-corpus-25-pdfs/*.pdf
 *.duckdb
 *.duckdb.wal
 *.sqlite3

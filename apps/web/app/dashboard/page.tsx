@@ -274,41 +274,67 @@ export default function DashboardPage() {
     setLoadingData(true);
     let anySucceeded = false;
 
-    const sessionTask = dashboardApi.getSession().then((res) => {
-      anySucceeded = true;
-      setWorkspaceName(res.workspace?.name || "Personal Workspace");
-      setWorkspaceId(res.workspace?.id);
-    });
-
-    const summaryTask = dashboardApi.getDocumentsSummary().then((res) => {
-      anySucceeded = true;
-      setSummary(res);
-    });
-
-    const docsTask = dashboardApi.listDocuments().then((docs) => {
-      anySucceeded = true;
-      setDocuments(docs);
-      setSelectedDocId((prev) =>
-        prev && docs.some((d) => d.id === prev) ? prev : docs[0]?.id ?? null
-      );
-    });
-
-    const analyticsTask = dashboardApi.getAnalyticsDashboard().then((res) => {
-      anySucceeded = true;
-      setAnalytics(res);
-    });
-
-    const relTask = dashboardApi.getRelationships(0.0).then((res) => {
-      anySucceeded = true;
-      setRelationships(res);
-    });
-
     try {
-      await Promise.allSettled([sessionTask, summaryTask, docsTask]);
+      // Single-roundtrip fast bootstrap (workspace + summary + documents in 1 request)
+      try {
+        const boot = await dashboardApi.getBootstrap();
+        anySucceeded = true;
+        setWorkspaceName(boot.workspace?.name || "Personal Workspace");
+        setWorkspaceId(boot.workspace?.id);
+        setSummary(boot.summary);
+        setDocuments(boot.documents);
+        setSelectedDocId((prev) =>
+          prev && boot.documents.some((d) => d.id === prev)
+            ? prev
+            : boot.documents[0]?.id ?? null
+        );
+        try {
+          window.sessionStorage.setItem(
+            "documind:bootstrapCache",
+            JSON.stringify(boot)
+          );
+        } catch {
+          // ignore storage quota errors
+        }
+      } catch {
+        // Fallback if backend bootstrap endpoint is mid-deploy
+        await Promise.allSettled([
+          dashboardApi.getSession().then((res) => {
+            anySucceeded = true;
+            setWorkspaceName(res.workspace?.name || "Personal Workspace");
+            setWorkspaceId(res.workspace?.id);
+          }),
+          dashboardApi.getDocumentsSummary().then((res) => {
+            anySucceeded = true;
+            setSummary(res);
+          }),
+          dashboardApi.listDocuments().then((docs) => {
+            anySucceeded = true;
+            setDocuments(docs);
+            setSelectedDocId((prev) =>
+              prev && docs.some((d) => d.id === prev)
+                ? prev
+                : docs[0]?.id ?? null
+            );
+          }),
+        ]);
+      }
+
       setInitialDocsLoaded(true);
-      await Promise.allSettled([analyticsTask, relTask]);
       setBackendOnline(anySucceeded);
       setStatusIndicatorActive(anySucceeded);
+
+      // Defer secondary analytics & relationship queries so initial dashboard render never waits on them
+      window.setTimeout(() => {
+        void Promise.allSettled([
+          dashboardApi.getAnalyticsDashboard().then((res) => {
+            setAnalytics(res);
+          }),
+          dashboardApi.getRelationships(0.0).then((res) => {
+            setRelationships(res);
+          }),
+        ]);
+      }, 80);
     } catch {
       setInitialDocsLoaded(true);
       setBackendOnline(anySucceeded);
@@ -351,7 +377,31 @@ export default function DashboardPage() {
     let active = true;
     const isActive = () => active;
 
+    // Hydrate warm session cache immediately if available for instant perceived paint
+    try {
+      const rawBoot = window.sessionStorage.getItem("documind:bootstrapCache");
+      if (rawBoot) {
+        const parsed = JSON.parse(rawBoot) as {
+          workspace?: { id?: string; name?: string };
+          summary?: DocumentsSummary;
+          documents?: DocumentItem[];
+        };
+        if (parsed.workspace?.name) setWorkspaceName(parsed.workspace.name);
+        if (parsed.workspace?.id) setWorkspaceId(parsed.workspace.id);
+        if (parsed.summary) setSummary(parsed.summary);
+        if (Array.isArray(parsed.documents)) {
+          setDocuments(parsed.documents);
+          setSelectedDocId((prev) => prev ?? parsed.documents?.[0]?.id ?? null);
+          setInitialDocsLoaded(true);
+        }
+      }
+    } catch {
+      // ignore storage parse issues
+    }
+
+    // Fire auth session verification and single-call workspace bootstrap in parallel (eliminating serial waterfall)
     void verifySession(isActive);
+    void loadWorkspaceData();
 
     const handlePageShow = () => {
       void verifySession(isActive);
@@ -369,7 +419,7 @@ export default function DashboardPage() {
       window.removeEventListener("pageshow", handlePageShow);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [verifySession]);
+  }, [verifySession, loadWorkspaceData]);
 
   // Proactive access token refresh before expiry + strict absolute session cutoff timer
   useEffect(() => {
@@ -481,11 +531,16 @@ export default function DashboardPage() {
     );
   }, [summary, documents, analytics, relationships]);
 
+  // Initial loadWorkspaceData now fires in parallel on mount; keep sign-out cleanup tidy
   useEffect(() => {
-    if (authStatus === "authenticated") {
-      void loadWorkspaceData();
+    if (authStatus === "unauthenticated") {
+      try {
+        window.sessionStorage.removeItem("documind:bootstrapCache");
+      } catch {
+        // ignore
+      }
     }
-  }, [authStatus, loadWorkspaceData]);
+  }, [authStatus]);
 
   useEffect(() => {
     if (
@@ -713,6 +768,7 @@ export default function DashboardPage() {
       await signOut();
       try {
         window.sessionStorage.removeItem("documind:activeNavId");
+        window.sessionStorage.removeItem("documind:bootstrapCache");
       } catch {
         // Ignore storage restrictions
       }
@@ -842,8 +898,8 @@ export default function DashboardPage() {
             )
           );
 
-          for (let attempt = 0; attempt < 150; attempt += 1) {
-            await new Promise((r) => window.setTimeout(r, 900));
+          for (let attempt = 0; attempt < 180; attempt += 1) {
+            await new Promise((r) => window.setTimeout(r, 1150));
             try {
               const st = await dashboardApi.getDocumentStatus(uploaded.id);
               const lower = (st.status || "").toLowerCase();
@@ -977,19 +1033,32 @@ export default function DashboardPage() {
         sourceFile: file,
       }));
 
-      setUploadTasks((prev) => [...createdTasks, ...prev].slice(0, 10));
+      setUploadTasks((prev) => [...createdTasks, ...prev].slice(0, 40));
       if (opts?.openModal !== false) {
         setUploadModalOpen(true);
       }
 
-      const settled = await Promise.all(
-        createdTasks.map((task, idx) =>
-          runSingleUploadTask(task.localId, files[idx], {
-            targetFolder: target,
-          })
-        )
-      );
-      return settled;
+      // Controlled 3-worker upload concurrency pool so dropping 4-25 PDFs at once
+      // never saturates browser connections or triggers server rate limits.
+      const results: Array<{ filename: string; doc?: DocumentItem; error?: string }> =
+        new Array(createdTasks.length);
+      let cursor = 0;
+      const workerCount = Math.min(3, createdTasks.length);
+
+      const runWorker = async () => {
+        while (cursor < createdTasks.length) {
+          const currentIdx = cursor;
+          cursor += 1;
+          results[currentIdx] = await runSingleUploadTask(
+            createdTasks[currentIdx].localId,
+            files[currentIdx],
+            { targetFolder: target }
+          );
+        }
+      };
+
+      await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+      return results;
     },
     [runSingleUploadTask, uploadTargetFolder]
   );
@@ -1198,14 +1267,14 @@ export default function DashboardPage() {
     }
   };
 
-  const handleGenerateQuiz = async (docId: string) => {
+  const handleGenerateQuiz = async (docId: string, numQuestions = 5) => {
     setQuizLoading(true);
     try {
-      const res = await dashboardApi.generateQuiz(docId, 3);
+      const res = await dashboardApi.generateQuiz(docId, numQuestions);
       setQuizResult(res);
       pushNotification({
         title: "Quiz generated",
-        detail: `${res.questions.length} source-backed questions ready in Studio.`,
+        detail: `${res.questions.length} interactive questions ready in Studio.`,
         tone: "success",
         targetNav: "studio",
         docId,
@@ -1219,14 +1288,14 @@ export default function DashboardPage() {
     }
   };
 
-  const handleGenerateAudio = async (docId?: string) => {
+  const handleGenerateAudio = async (docId?: string, style = "storytelling") => {
     setAudioLoading(true);
     try {
-      const res = await dashboardApi.generateAudioBriefing(docId);
+      const res = await dashboardApi.generateAudioBriefing(docId, style);
       setAudioResult(res);
       pushNotification({
-        title: "Audio briefing ready",
-        detail: `${res.title} (${res.duration_estimate}) is ready to play in Studio.`,
+        title: "Audio story ready",
+        detail: `${res.title} (${res.duration_estimate}) is ready to narrate in Studio.`,
         tone: "success",
         targetNav: "studio",
         docId,
@@ -1576,17 +1645,17 @@ export default function DashboardPage() {
               onGenerateWidget={(chartType, prompt) => {
                 void handleGenerateWidget(chartType, prompt);
               }}
-              onRunSynthesis={(docIds) => {
-                void handleRunSynthesis(docIds);
+              onRunSynthesis={(docIds, focusQuery) => {
+                void handleRunSynthesis(docIds, focusQuery);
               }}
               onRecomputeRelationships={() => {
                 void handleRecomputeRelationships();
               }}
-              onGenerateQuiz={(docId) => {
-                void handleGenerateQuiz(docId);
+              onGenerateQuiz={(docId, numQuestions) => {
+                void handleGenerateQuiz(docId, numQuestions);
               }}
-              onGenerateAudio={(docId) => {
-                void handleGenerateAudio(docId);
+              onGenerateAudio={(docId, style) => {
+                void handleGenerateAudio(docId, style);
               }}
               onDropPreviewCardOnCanvas={(idx) => {
                 handleSelectPreview(idx);

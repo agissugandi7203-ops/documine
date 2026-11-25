@@ -315,6 +315,7 @@ export interface AudioBriefingResponse {
     source_chunk_id?: string | null;
   }>;
   takeaway_summary: string;
+  style?: string;
 }
 
 export interface SynthesizedAudioTurn {
@@ -328,8 +329,26 @@ export interface SynthesizedAudioTurn {
 
 export interface AudioSynthesizeResponse {
   model_used: string;
+  voice_used?: string;
   fallback_browser_tts: boolean;
   segments: SynthesizedAudioTurn[];
+}
+
+export interface WorkspaceBootstrapResponse {
+  authenticated?: boolean;
+  user?: {
+    id: string;
+    email: string;
+    username: string;
+    email_verified?: boolean;
+  };
+  workspace: {
+    id: string;
+    name: string;
+    role: string;
+  };
+  summary: DocumentsSummary;
+  documents: DocumentItem[];
 }
 
 export interface GraphAutoConnectResponse {
@@ -572,6 +591,8 @@ async function proxyFetch<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const dashboardApi = {
+  getBootstrap: () =>
+    proxyFetch<WorkspaceBootstrapResponse>("documents/bootstrap"),
   getSession: () => proxyFetch<WorkspaceSessionResponse>("auth/session"),
   getDocumentsSummary: () => proxyFetch<DocumentsSummary>("documents/summary"),
   listDocuments: () => proxyFetch<DocumentItem[]>("documents"),
@@ -789,22 +810,27 @@ export const dashboardApi = {
         body: JSON.stringify(payload),
       }
     ),
-  generateQuiz: (documentId: string, numQuestions = 3) =>
+  generateQuiz: (documentId: string, numQuestions = 5) =>
     proxyFetch<QuizResponse>(
       `chat/quiz?document_id=${encodeURIComponent(
         documentId
       )}&num_questions=${numQuestions}`,
       { method: "POST" }
     ),
-  generateAudioBriefing: (documentId?: string) =>
+  generateAudioBriefing: (documentId?: string, style = "storytelling") =>
     proxyFetch<AudioBriefingResponse>("audio/briefing-script", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(documentId ? { document_id: documentId } : {}),
+      body: JSON.stringify({
+        ...(documentId ? { document_id: documentId } : {}),
+        style,
+      }),
     }),
   synthesizeAudio: (payload: {
     document_id?: string;
     title?: string;
+    voice?: string;
+    style?: string;
     script: Array<{
       speaker: string;
       text: string;

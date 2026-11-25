@@ -909,6 +909,9 @@ export function ChatWorkspace({
           .reverse()
           .find((m) => m.citations && m.citations.length > 0);
         setActiveCitations(lastCited?.citations || []);
+        if (lastCited?.citations && lastCited.citations.length > 0) {
+          setDrawerTab("citations");
+        }
         if (window.matchMedia("(max-width: 1023px)").matches) {
           setDrawerOpen(false);
         }
